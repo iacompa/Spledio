@@ -27,6 +27,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from spledio.commands.history import Change, Command, LayerPatch, PatchStore, write_patch
+from spledio.dsp.spectral import add_scaled_in_place
 from spledio.selections.selection import Selection
 
 MUTE = -math.inf
@@ -148,20 +149,18 @@ class AreaCommand(Command):
         return ch
 
     def release(self, store):
-        store.release(self.patch.before)
-        store.release(self.patch.after)
+        store.release(self.patch.held)
 
 
-def area_audio(layer_audio: np.ndarray, area: AdjustArea, store: PatchStore, new_gain: float,
-               old_gain: float | None = None) -> np.ndarray:
-    """New samples for the area's span after moving it from ``old_gain`` to ``new_gain``."""
+def change_area_gain(layer_audio: np.ndarray, area: AdjustArea, store: PatchStore, new_gain: float,
+                     old_gain: float | None = None) -> None:
+    """Move the area's span in ``layer_audio`` from ``old_gain`` to ``new_gain``, in place:
+    each sample becomes ``x + (G' − G)·c``, computed in float64 and rounded once to the layer's
+    dtype (:func:`~spledio.dsp.spectral.add_scaled_in_place`), so no full-size float64 copy of
+    the span or of ``c`` is made. The component is read before any sample changes."""
     old = area.gain_db if old_gain is None else old_gain
     c = store.get(area.component)
-    seg = layer_audio[:, area.start : area.end].astype(np.float64)
-    d = factor(new_gain) - factor(old)
-    if d != 0.0:
-        seg = seg + d * c.astype(np.float64)
-    return seg
+    add_scaled_in_place(layer_audio, area.start, area.channels, c, factor(new_gain) - factor(old))
 
 
 def area_contains(area: AdjustArea, t: float, f: float) -> bool:
@@ -174,5 +173,5 @@ def area_contains(area: AdjustArea, t: float, f: float) -> bool:
     return bool(m.ravel()[0] > 0.5)
 
 
-__all__ = ["AdjustArea", "AreaCommand", "AreasStateCommand", "step_gain", "gain_text", "area_audio",
+__all__ = ["AdjustArea", "AreaCommand", "AreasStateCommand", "step_gain", "gain_text", "change_area_gain",
            "area_contains", "MUTE", "MERGE_WINDOW_S", "FLOOR_DB", "MAX_BOOST_DB", "STEP_DB", "BIG_STEP_DB"]

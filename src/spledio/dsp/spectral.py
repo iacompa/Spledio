@@ -33,6 +33,9 @@ from spledio.selections.geometry import raised_cosine
 from spledio.selections.selection import Selection, raster_extent, rasterize
 
 
+_BLOCK = 1 << 16  # samples per block for sample-domain loops (keeps temporaries small)
+
+
 class Cancelled(Exception):
     """Raised when a long render is cancelled; no state has been modified."""
 
@@ -97,10 +100,18 @@ def selected_component(
     chunk_frames: int = 384,
     cancel: Callable[[], bool] | None = None,
     allow_time_path: bool = True,
+    dtype=np.float64,
 ) -> Component | None:
     """Compute ``ISTFT(M * X)`` (or the exact time-domain equivalent) for the
     selection over ``audio`` (channels, frames). Returns ``None`` if the
     selection covers no processing cells.
+
+    The maths is float64 whatever ``dtype`` is. ``dtype=np.float32`` returns
+    exactly ``float64 result.astype(float32)`` – the overlap-add runs in a
+    float64 window that slides along with the chunks and each sample is
+    rounded once, when it is final – without ever holding the float64
+    component of the whole span (half the memory; used for adjusted areas,
+    whose component is stored in the layer's float32 anyway).
     """
     audio = np.asarray(audio)
     if audio.ndim != 2:
@@ -109,6 +120,7 @@ def selected_component(
     chans = resolve_channels(selection, n_ch)
     if n == 0:
         return None
+    dtype = np.dtype(dtype)
 
     span = selection.time_span_of_rect() if allow_time_path else None
     if span is not None:
@@ -118,15 +130,31 @@ def selected_component(
         a, b = max(0, ha - fs), min(n, hb + fs)
         if b <= a:
             return None
-        env = time_envelope(span[0], span[1], ft, sample_rate, a, b)
-        nz = np.nonzero(env > 0)[0]
-        if len(nz) == 0:
+
+        def env(i: int, j: int) -> np.ndarray:  # envelope on [i, j); elementwise, so blocks match the whole
+            return time_envelope(span[0], span[1], ft, sample_rate, i, j)
+
+        first = last = None
+        for i in range(a, b, _BLOCK):  # first sample with a non-zero envelope
+            nz = np.flatnonzero(env(i, min(b, i + _BLOCK)) > 0)
+            if nz.size:
+                first = i + int(nz[0])
+                break
+        if first is None:
             return None
-        a, b = a + int(nz[0]), a + int(nz[-1]) + 1
-        env = env[nz[0] : nz[-1] + 1]
-        data = np.zeros((n_ch, b - a))
-        for c in chans:
-            data[c] = audio[c, a:b].astype(np.float64) * env
+        for j in range(b, first, -_BLOCK):  # last one
+            i = max(first, j - _BLOCK)
+            nz = np.flatnonzero(env(i, j) > 0)
+            if nz.size:
+                last = i + int(nz[-1])
+                break
+        a, b = first, last + 1
+        data = np.zeros((n_ch, b - a), dtype=dtype)
+        for i in range(a, b, _BLOCK):
+            j = min(b, i + _BLOCK)
+            e = env(i, j)
+            for c in chans:
+                data[c, i - a : j - a] = audio[c, i:j].astype(np.float64) * e
         return Component(a, data, "time", cfg, chans)
 
     ext = raster_extent(selection, cfg, sample_rate, n)
@@ -135,11 +163,29 @@ def selected_component(
     k0, k1 = ext[0], ext[1]
     sa, sb = cfg.support_of_frames(k0, k1)
     out_a, out_b = max(sa, 0), min(sb, n)
-    data = np.zeros((n_ch, out_b - out_a))
+    data = np.zeros((n_ch, out_b - out_a), dtype=dtype)
+    # Overlap-add window: float64 samples [acc_a, acc_a + width). A chunk starting at frame c0
+    # only writes samples >= c0*hop - n_fft/2, so everything before that is final.
+    width = chunk_frames * cfg.hop + cfg.n_fft
+    acc = np.zeros((n_ch, width))
+    acc_a = out_a
+
+    def flush(upto: int) -> None:
+        nonlocal acc_a
+        m = min(upto, out_b) - acc_a
+        if m <= 0:
+            return
+        assert m <= width
+        data[:, acc_a - out_a : acc_a - out_a + m] = acc[:, :m]
+        acc[:, : width - m] = acc[:, m:]
+        acc[:, width - m :] = 0.0
+        acc_a += m
+
     any_cell = False
     for c0 in range(k0, k1, chunk_frames):
         if cancel is not None and cancel():
             raise Cancelled()
+        flush(c0 * cfg.hop - cfg.half)
         r = rasterize(selection, cfg, sample_rate, n, k_range=(c0, min(k1, c0 + chunk_frames)))
         if r is None:
             continue
@@ -155,9 +201,10 @@ def selected_component(
             D = np.zeros_like(X)
             D[:, r.b0 : r.b1] = X[:, r.b0 : r.b1] * sub
             s, y = istft_segment(D, cfg, kk0, n)
-            data[c, s - out_a : s - out_a + len(y)] += y
+            acc[c, s - acc_a : s - acc_a + len(y)] += y
     if not any_cell:
         return None
+    flush(out_b)
     return Component(out_a, data, "stft", cfg, chans)
 
 
@@ -166,6 +213,32 @@ def apply_gain_to_region(audio: np.ndarray, comp: Component, gain_db: float) -> 
     g = gain_factor(gain_db)
     seg = audio[:, comp.start : comp.end].astype(np.float64)
     return seg + (g - 1.0) * comp.data
+
+
+def add_scaled_in_place(audio: np.ndarray, start: int, channels, c: np.ndarray, d: float) -> None:
+    """``audio[ch, start:start+n] = x + d·c`` for each ``ch`` in ``channels``, in place.
+
+    ``c`` is ``(channels, n)``. Per sample this is exactly ``float64(x) + d·float64(c)``
+    rounded once to ``audio``'s dtype – the same values as building the whole region in
+    float64 (:func:`apply_gain_to_region` with ``d = G − 1``) and assigning it – but done in
+    blocks, so no full-size temporary exists. ``d == 0`` changes nothing. The block buffers
+    are allocated before the first sample is written."""
+    if d == 0.0:
+        return
+    n = c.shape[1]
+    k = min(n, _BLOCK)
+    bx, bt = np.empty(k), np.empty(k)
+    d = float(d)
+    for ch in channels:
+        row, crow = audio[ch, start : start + n], c[ch]
+        for i in range(0, n, _BLOCK):
+            j = min(n, i + _BLOCK)
+            x, t = bx[: j - i], bt[: j - i]
+            np.copyto(x, row[i:j])
+            np.copyto(t, crow[i:j])
+            np.multiply(t, d, out=t)
+            np.add(x, t, out=x)
+            np.copyto(row[i:j], x, casting="same_kind")
 
 
 def coverage_gain_region(audio: np.ndarray, comp: Component, gain_db: float) -> np.ndarray:

@@ -32,6 +32,10 @@ from spledio.commands.history import (
     LayerPatch,
     TimelineCommand,
     make_patch,
+    patch_in_place,
+    patch_versions,
+    read_rows,
+    write_rows,
 )
 from spledio.domain.project import Asset, Layer, Project, new_id
 from spledio.engine.areas import (
@@ -39,12 +43,12 @@ from spledio.engine.areas import (
     AdjustArea,
     AreaCommand,
     AreasStateCommand,
-    area_audio,
     area_contains,
+    change_area_gain,
     gain_text,
     step_gain,
 )
-from spledio.dsp.spectral import Component, apply_gain_to_region, gain_factor, selected_component
+from spledio.dsp.spectral import Component, add_scaled_in_place, apply_gain_to_region, gain_factor, selected_component
 from spledio.dsp.stft import DEFAULT_EDIT_CONFIG, STFTConfig
 from spledio.selections.geometry import INF_F, BrushShape, RectShape
 from spledio.selections.selection import INTERSECT, Selection, SelectionOp, select_all
@@ -134,6 +138,7 @@ class EditorSession:
         # adjusted areas (re-adjustable, removable gain regions; see engine/areas.py)
         self.areas: tuple[AdjustArea, ...] = ()
         self.active_area_id: str | None = None
+        self._component_handles: set[int] = set()  # stored area components (freed once nothing refers to them)
         self.history.mark_saved()
 
     # ------------------------------------------------------------------ setup
@@ -358,13 +363,30 @@ class EditorSession:
                 return self._comp_cache[1]
             comp = selected_component(layer.audio, sel, self.edit_config, self.sample_rate, cancel=cancel)
             if comp is None:
-                raise EditError(
-                    "The selection covers no analysis cells at the current processing resolution "
-                    f"({self.edit_config.frame_spacing(self.sample_rate) * 1000:.1f} ms x "
-                    f"{self.edit_config.bin_spacing(self.sample_rate):.1f} Hz); make it larger"
-                )
+                raise self._no_cells_error()
             self._comp_cache = (key, comp)
             return comp
+
+    def _no_cells_error(self) -> EditError:
+        return EditError(
+            "The selection covers no analysis cells at the current processing resolution "
+            f"({self.edit_config.frame_spacing(self.sample_rate) * 1000:.1f} ms x "
+            f"{self.edit_config.bin_spacing(self.sample_rate):.1f} Hz); make it larger"
+        )
+
+    def _storage_component(self, sel: Selection, layer: Layer) -> tuple[int, np.ndarray, tuple[int, ...]]:
+        """(start, data, channels) of the selected component in the storage dtype (float32 unless the
+        project stores float64), as kept by an adjusted area: the float64 component rounded once,
+        computed without holding the float64 component of the whole span (unless it is cached)."""
+        dt = np.dtype(np.float64 if self.project.storage_dtype == "float64" else np.float32)
+        key = (sel, layer.id, layer.version, self.edit_config)
+        if self._comp_cache is not None and self._comp_cache[0] == key:
+            comp = self._comp_cache[1]
+            return comp.start, comp.data.astype(dt), tuple(comp.channels)
+        comp = selected_component(layer.audio, sel, self.edit_config, self.sample_rate, dtype=dt)
+        if comp is None:
+            raise self._no_cells_error()
+        return comp.start, comp.data, tuple(comp.channels)
 
     def _label(self, verb: str, sel: Selection, layer: Layer, gain_db: float | None = None) -> str:
         parts = [verb if gain_db is None else f"{verb} {fmt_db(gain_db)}"]
@@ -396,6 +418,7 @@ class EditorSession:
 
     def _commit(self, cmd: Command, change: Change, warnings_region: tuple[int, int] | None = None) -> EditResult:
         self.history.push_applied(cmd)
+        self._release_unused_components()
         self.operation_log.append(cmd.summary())
         warnings: list[str] = []
         peak = None
@@ -412,16 +435,17 @@ class EditorSession:
             layer = self._editable_layer()
             if not math.isinf(gain_db) and abs(gain_db) < 1e-9:
                 raise EditError("0 dB changes nothing")
-            if self._preview is not None and self._preview_matches(gain_db, sel, layer):
-                pv = self._preview
-                new = pv.processed
-                comp = pv.component
-            else:
-                comp = self.component(sel, layer)
-                new = apply_gain_to_region(layer.audio, comp, gain_db)
-            patch = make_patch(self.history.store, layer, comp.start, new, comp.channels)
+            pv = self._preview if self._preview is not None and self._preview_matches(gain_db, sel, layer) else None
+            comp = pv.component if pv is not None else self.component(sel, layer)
             label = self._label(verb, sel, layer, None if verb in ("Mute", "Delete spectral content") else gain_db)
-            cmd = PatchCommand(label, [patch], self._params(sel, layer, comp, gain_db=gain_db, verb=verb))
+            params = self._params(sel, layer, comp, gain_db=gain_db, verb=verb)
+            if pv is not None:  # what was previewed is what gets committed
+                patch = make_patch(self.history.store, layer, comp.start, pv.processed, comp.channels)
+            else:  # x + (G − 1)·c written in place (same values as apply_gain_to_region, no float64 copy)
+                d = gain_factor(gain_db) - 1.0
+                patch = patch_in_place(self.history.store, layer, comp.start, comp.data.shape[1], comp.channels,
+                                       lambda: add_scaled_in_place(layer.audio, comp.start, comp.channels, comp.data, d))
+            cmd = PatchCommand(label, [patch], params)
             change = cmd.redo(self.project, self.history.store)
             return self._commit(cmd, change, (comp.start, comp.end) if gain_factor(gain_db) > 1.0 else None)
 
@@ -749,8 +773,31 @@ class EditorSession:
         return " · ".join([head, self.selection_label(a.selection), layer.name])
 
     def _area_patch(self, layer: Layer, a: AdjustArea, new_gain: float, old_gain: float) -> LayerPatch:
-        new = area_audio(layer.audio, a, self.history.store, new_gain, old_gain)
-        return make_patch(self.history.store, layer, a.start, new, a.channels)
+        """Applied patch: the area's span moved from ``old_gain`` to ``new_gain`` in the layer, in place.
+        Only the samples from before are copied (for undo); nothing else of span size is allocated."""
+        store = self.history.store
+        return patch_in_place(store, layer, a.start, a.length, a.channels,
+                              lambda: change_area_gain(layer.audio, a, store, new_gain, old_gain))
+
+    def _release_unused_components(self) -> None:
+        """Free stored area components that neither the area list nor any undo/redo step refers to
+        (e.g. an area whose creation was undone and then dropped from the redo list)."""
+        if not self._component_handles:
+            return
+        used = {a.component for a in self.areas}
+
+        def walk(cmd: Command) -> None:
+            if isinstance(cmd, (AreaCommand, AreasStateCommand)):
+                used.update(a.component for a in cmd.before + cmd.after)
+            elif isinstance(cmd, CompositeCommand):
+                for c in cmd.children:
+                    walk(c)
+
+        for cmd in self.history.undo_stack + self.history.redo_stack:
+            walk(cmd)
+        for h in self._component_handles - used:
+            self.history.store.release(h)
+        self._component_handles &= used
 
     def adjust_area(self, direction: int = 0, big: bool = False, target_db: float | None = None,
                     area_id: str | None = None, requested_at: float | None = None) -> EditResult | None:
@@ -771,24 +818,24 @@ class EditorSession:
             if a is None:
                 sel = self.selection_or_error()
                 layer = self._editable_layer()
-                comp = self.component(sel, layer)
-                dt = np.dtype(np.float64 if self.project.storage_dtype == "float64" else np.float32)
+                g = float(target_db) if target_db is not None else step_gain(0.0, direction, big)
+                if g == 0.0:
+                    raise EditError("0 dB changes nothing – press ↓ to make it quieter or ↑ to make it louder")
+                start, data, chans = self._storage_component(sel, layer)
                 number = max((x.number for x in self.areas), default=0) + 1
-                a = AdjustArea(new_id("area"), number, layer.id, sel, 0.0, comp.start, comp.data.shape[1],
-                               tuple(comp.channels), store.put(comp.data.astype(dt)), time.time())
+                a = AdjustArea(new_id("area"), number, layer.id, sel, 0.0, start, data.shape[1], chans,
+                               store.put(data), time.time())
+                del data
+                self._component_handles.add(a.component)
                 new_area = True
             else:
                 layer = self.project.layer(a.layer_id)
                 if layer.locked:
                     raise EditError(f"Layer '{layer.name}' is locked; unlock it to change {a.name}")
                 new_area = False
-            g = float(target_db) if target_db is not None else step_gain(a.gain_db, direction, big)
-            if g == a.gain_db:
-                if new_area:
-                    store.release(a.component)
-                    raise EditError("0 dB changes nothing – press ↓ to make it quieter or ↑ to make it louder")
-                return None
-            patch = self._area_patch(layer, a, g, a.gain_db)
+                g = float(target_db) if target_db is not None else step_gain(a.gain_db, direction, big)
+                if g == a.gain_db:
+                    return None
             na = a.with_gain(g)
             before = self.areas
             after = tuple(na if x.id == a.id else x for x in before) if not new_area else before + (na,)
@@ -799,12 +846,18 @@ class EditorSession:
                      and not self.history.redo_stack and self.history._saved_marker is not top
                      and (time.monotonic() if requested_at is None else requested_at) - top.touched
                      < MERGE_WINDOW_S
-                     and top.patch.start == patch.start and top.patch.length == patch.length)
+                     and top.patch.start == a.start and top.patch.length == a.length and top.patch.applied)
             if merge:
-                merged = LayerPatch(layer.id, patch.start, top.patch.before, patch.after, patch.channels, patch.length)
-                store.release(patch.before)
-                store.release(top.patch.after)
-                cmd = AreaCommand(label, self, merged, top.before, after, a.id, "adjust", params)
+                # The previous step keeps the samples from before it; only the layer changes.
+                snapshot = read_rows(layer.audio, a.channels, a.start, a.end)  # put back if the change fails
+                try:
+                    change_area_gain(layer.audio, a, store, g, a.gain_db)
+                except BaseException:
+                    write_rows(layer.audio, a.channels, a.start, snapshot)
+                    raise
+                del snapshot
+                layer.bump()
+                cmd = AreaCommand(label, self, top.patch, top.before, after, a.id, "adjust", params)
                 change = cmd.redo(self.project, store)
                 self.history.undo_stack[-1] = cmd
                 self.active_area_id = a.id
@@ -813,8 +866,15 @@ class EditorSession:
                 peak = self._check_clip(a.start, a.end, warnings) if g > 0 else None
                 self._after_change(change, label)
                 return EditResult(cmd, warnings, peak)
+            try:
+                patch = self._area_patch(layer, a, g, a.gain_db)
+            except BaseException:
+                if new_area:
+                    store.release(a.component)
+                    self._component_handles.discard(a.component)
+                raise
             cmd = AreaCommand(label, self, patch, before, after, a.id, "adjust", params)
-            change = cmd.redo(self.project, store)
+            change = cmd.redo(self.project, store)  # the patch is applied already: sets the area list
             self.active_area_id = a.id
             return self._commit(cmd, change, (a.start, a.end) if g > 0 else None)
 
@@ -830,10 +890,11 @@ class EditorSession:
             layer = self.project.layer(a.layer_id)
             if layer.locked:
                 raise EditError(f"Layer '{layer.name}' is locked; unlock it to remove {a.name}")
-            patch = self._area_patch(layer, a, 0.0, a.gain_db)
+            label = self._area_label(a, layer, f"Remove {a.name} ({gain_text(a.gain_db)})")
+            params = {"area": a.to_dict(), "action": "remove"}
             after = tuple(x for x in self.areas if x.id != a.id)
-            cmd = AreaCommand(self._area_label(a, layer, f"Remove {a.name} ({gain_text(a.gain_db)})"), self, patch,
-                              self.areas, after, a.id, "remove", {"area": a.to_dict(), "action": "remove"})
+            patch = self._area_patch(layer, a, 0.0, a.gain_db)
+            cmd = AreaCommand(label, self, patch, self.areas, after, a.id, "remove", params)
             change = cmd.redo(self.project, self.history.store)
             return self._commit(cmd, change)
 
@@ -850,11 +911,11 @@ class EditorSession:
             try:
                 for a in todo:
                     layer = self.project.layer(a.layer_id)
-                    patch = self._area_patch(layer, a, 0.0, a.gain_db)
                     after = tuple(x for x in self.areas if x.id != a.id)
+                    patch = self._area_patch(layer, a, 0.0, a.gain_db)
                     c = AreaCommand(f"Remove {a.name}", self, patch, self.areas, after, a.id, "remove")
-                    change = change.merge(c.redo(self.project, self.history.store))
                     children.append(c)
+                    change = change.merge(c.redo(self.project, self.history.store))
             except Exception:
                 for c in reversed(children):
                     c.undo(self.project, self.history.store)
@@ -918,15 +979,15 @@ class EditorSession:
             layer = self.project.layer(pv.layer_id)
             return AuditionBuffer(pv.start, self._f32((pv.original - pv.processed) * layer.mix_factor),
                                   f"Removed by preview: {pv.label}")
-        for cmd in reversed(self.history.undo_stack):
+        for i in range(len(self.history.undo_stack) - 1, -1, -1):
+            cmd = self.history.undo_stack[i]
             patches = _patches_of(cmd)
             if patches:
                 p = patches[0]
-                layer = self.project.layer(p.layer_id) if self.project.has_layer(p.layer_id) else None
-                f = layer.mix_factor if layer else 1.0
-                before = self.history.store.get(p.before).astype(np.float64)
-                after = self.history.store.get(p.after).astype(np.float64)
-                return AuditionBuffer(p.start, self._f32((before - after) * f), f"Removed by: {cmd.label}")
+                f = self.project.layer(p.layer_id).mix_factor if self.project.has_layer(p.layer_id) else 1.0
+                before, after = patch_versions(self.project, self.history, i, p)
+                return AuditionBuffer(p.start, self._f32((before.astype(np.float64) - after.astype(np.float64)) * f),
+                                      f"Removed by: {cmd.label}")
         raise EditError("No edit to compare: apply or preview an edit first")
 
     def ab_regions(self) -> tuple[int, np.ndarray, np.ndarray, str]:
@@ -939,12 +1000,13 @@ class EditorSession:
             a = self.mix_with_override(layer, pv.start, pv.original)
             b = self.mix_with_override(layer, pv.start, pv.processed)
             return pv.start, a, b, pv.label
-        for cmd in reversed(self.history.undo_stack):
+        for i in range(len(self.history.undo_stack) - 1, -1, -1):
+            cmd = self.history.undo_stack[i]
             patches = _patches_of(cmd)
             if patches:
                 p = patches[0]
                 layer = self.project.layer(p.layer_id)
-                a = self.mix_with_override(layer, p.start, self.history.store.get(p.before))
+                a = self.mix_with_override(layer, p.start, patch_versions(self.project, self.history, i, p)[0])
                 b = self.project.render_mix(p.start, p.end, dtype=np.float32)
                 return p.start, a, b, cmd.label
         raise EditError("No edit to compare: apply or preview an edit first")

@@ -279,6 +279,7 @@ def _load_areas(zf: zipfile.ZipFile, items, s, dtype) -> None:
         except (KeyError, ValueError, TypeError) as e:
             raise ProjectFormatError(f"bad adjusted-area data: {e}") from e
     s.areas = tuple(out)
+    s._component_handles.update(a.component for a in out)
 
 
 def _read_npy(zf: zipfile.ZipFile, member: str, max_bytes: int) -> np.ndarray:

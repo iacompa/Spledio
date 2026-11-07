@@ -1,7 +1,9 @@
 """Reversible command history with a bounded, disk-spilling patch store.
 
-* Every audio edit stores a :class:`LayerPatch` (layer, start, before, after).
-  Undo writes *before*, redo writes *after*: exact sample restoration.
+* Every audio edit stores a :class:`LayerPatch` (layer, region, samples).
+  Undo puts back the samples from before the edit, redo the ones it wrote:
+  exact sample restoration. Only the version that is not in the layer is
+  kept; undo/redo swap it with the layer's (see :class:`LayerPatch`).
 * Patch arrays live in :class:`PatchStore`, which keeps recent patches in
   RAM up to a byte budget and spills older ones to ``.npy`` files in a
   private temporary directory (loaded with ``allow_pickle=False``).
@@ -22,7 +24,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
@@ -107,12 +109,25 @@ class PatchStore:
 
 @dataclass
 class LayerPatch:
+    """Exact samples of one region of one layer, before and after an edit – each kept once.
+
+    The store holds only the version that is *not* in the layer right now
+    (``held``): the samples from before the edit while it is applied, the
+    samples it wrote while it is undone. Undo and redo swap the held samples
+    with the layer's. History is linear (commands are undone and redone
+    strictly in stack order, and only commands write layer audio), so at that
+    moment the layer holds exactly the other version and the swap restores
+    bit-exact samples, with half the memory of keeping both copies.
+
+    Only rows ``channels`` are kept; the edit does not change the other rows.
+    """
+
     layer_id: str
     start: int
-    before: int  # PatchStore handle
-    after: int
+    held: int  # PatchStore handle: rows `channels` of the version not in the layer, (len(channels), length)
     channels: tuple[int, ...]
     length: int
+    applied: bool = False
 
     @property
     def end(self) -> int:
@@ -153,21 +168,73 @@ class Command:
         return {"kind": self.kind, "label": self.label, "params": self.params, "timestamp": self.timestamp}
 
 
+def _all_rows(audio: np.ndarray, channels: tuple[int, ...]) -> bool:
+    return tuple(channels) == tuple(range(audio.shape[0]))
+
+
+def read_rows(audio: np.ndarray, channels: tuple[int, ...], start: int, end: int) -> np.ndarray:
+    """A copy of rows ``channels`` of ``audio[:, start:end]``."""
+    if _all_rows(audio, channels):
+        return audio[:, start:end].copy()
+    return audio[list(channels), start:end]  # fancy indexing copies
+
+
+def write_rows(audio: np.ndarray, channels: tuple[int, ...], start: int, rows: np.ndarray) -> None:
+    """Write ``rows`` (len(channels), n) into rows ``channels`` of ``audio`` at ``start``."""
+    end = start + rows.shape[1]
+    if _all_rows(audio, channels):
+        audio[:, start:end] = rows
+    else:
+        for i, c in enumerate(channels):
+            audio[c, start:end] = rows[i]
+
+
 def make_patch(store: PatchStore, layer: "Layer", start: int, new: np.ndarray, channels: tuple[int, ...]) -> LayerPatch:
-    """Record before/after for writing ``new`` (channels, n) into ``layer`` at ``start``."""
+    """Patch that writes rows ``channels`` of ``new`` (channels, n) into ``layer`` at ``start``.
+
+    Not applied yet (the command's ``redo`` applies it): the store holds the new
+    samples, rounded once to the layer's dtype."""
     n = new.shape[1]
-    before = layer.audio[:, start : start + n].copy()
-    after = before.copy()
-    for c in channels:
-        after[c] = new[c].astype(layer.audio.dtype)
-    return LayerPatch(layer.id, start, store.put(before), store.put(after), tuple(channels), n)
+    ch = tuple(channels)
+    after = np.empty((len(ch), n), dtype=layer.audio.dtype)
+    for i, c in enumerate(ch):
+        after[i] = new[c]
+    return LayerPatch(layer.id, start, store.put(after), ch, n, applied=False)
+
+
+def patch_in_place(store: PatchStore, layer: "Layer", start: int, length: int, channels: tuple[int, ...],
+                   apply: Callable[[], None]) -> LayerPatch:
+    """Applied patch for an edit that ``apply()`` makes directly in ``layer.audio``.
+
+    Keeps a copy of the region's current rows ``channels`` (the only full-size
+    copy: no separate array of new samples is built), then calls ``apply()``,
+    which must change only those samples. If it fails, the samples are put back."""
+    ch = tuple(channels)
+    h = store.put(read_rows(layer.audio, ch, start, start + length))
+    try:
+        apply()
+    except BaseException:
+        write_rows(layer.audio, ch, start, store.get(h))
+        store.release(h)
+        raise
+    layer.bump()
+    return LayerPatch(layer.id, start, h, ch, length, applied=True)
 
 
 def write_patch(project: "Project", store: PatchStore, p: LayerPatch, use_after: bool) -> tuple[str, int, int]:
-    layer = project.layer(p.layer_id)
-    data = store.get(p.after if use_after else p.before)
-    layer.audio[:, p.start : p.end] = data
-    layer.bump()
+    """Bring ``p`` to the applied (``use_after``) or the undone state: swap the held samples with the layer's."""
+    if p.applied != use_after:
+        layer = project.layer(p.layer_id)
+        held = store.get(p.held)  # may load from disk; nothing has changed yet
+        h = store.put(read_rows(layer.audio, p.channels, p.start, p.end))
+        try:
+            write_rows(layer.audio, p.channels, p.start, held)
+        except BaseException:
+            store.release(h)
+            raise
+        store.release(p.held)
+        p.held, p.applied = h, use_after
+        layer.bump()
     return (p.layer_id, p.start, p.end)
 
 
@@ -186,8 +253,7 @@ class PatchCommand(Command):
 
     def release(self, store):
         for p in self.patches:
-            store.release(p.before)
-            store.release(p.after)
+            store.release(p.held)
 
 
 class LayerPropsCommand(Command):
@@ -384,6 +450,51 @@ class CompositeCommand(Command):
     def release(self, store):
         for c in self.children:
             c.release(store)
+
+
+def _audio_steps(cmd: Command):
+    """The audio changes a command made, in order: :class:`LayerPatch` objects, or
+    ``(layer_id, handle)`` for a step that replaced a layer's whole audio (the handle holds that
+    layer's audio from just before the step)."""
+    if isinstance(cmd, CompositeCommand):
+        for c in cmd.children:
+            yield from _audio_steps(c)
+    elif isinstance(cmd, PatchCommand):
+        yield from cmd.patches
+    elif isinstance(cmd, TimelineCommand):
+        yield from cmd.before.items()
+    elif isinstance(cmd, RemoveLayerCommand):
+        if cmd._handle is not None:
+            yield (cmd.layer.id, cmd._handle)
+    elif isinstance(getattr(cmd, "patch", None), LayerPatch):  # e.g. adjusted-area commands
+        yield cmd.patch
+
+
+def patch_versions(project: "Project", history: "History", index: int, p: LayerPatch) -> tuple[np.ndarray, np.ndarray]:
+    """(before, after): all rows of ``p``'s region just before and just after it was applied by
+    ``history.undo_stack[index]``, bit-exact (for difference / A-B listening; copies).
+
+    Only one version of each patch is stored, so the "after" samples are rebuilt: from the current
+    audio, undoing – on a copy of this region only – every later step that touched it."""
+    store = history.store
+    steps = [st for cmd in history.undo_stack[index:] for st in _audio_steps(cmd)]
+    later = steps[next(i for i, st in enumerate(steps) if st is p) + 1 :]
+    reset = next((i for i, st in enumerate(later) if not isinstance(st, LayerPatch) and st[0] == p.layer_id), None)
+    if reset is not None:  # the layer's whole audio was replaced later: start from its audio before that
+        region = np.array(store.get(later[reset][1])[:, p.start : p.end])
+        later = later[:reset]
+    else:
+        region = project.layer(p.layer_id).audio[:, p.start : p.end].copy()
+    for st in reversed(later):
+        if isinstance(st, LayerPatch) and st.layer_id == p.layer_id:
+            lo, hi = max(st.start, p.start), min(st.end, p.end)
+            if lo < hi:
+                held = store.get(st.held)  # applied: the samples from before that step
+                for i, c in enumerate(st.channels):
+                    region[c, lo - p.start : hi - p.start] = held[i, lo - st.start : hi - st.start]
+    before = region.copy()
+    write_rows(before, p.channels, 0, store.get(p.held))
+    return before, region
 
 
 class History:
