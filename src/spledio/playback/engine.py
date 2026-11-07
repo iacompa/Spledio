@@ -227,6 +227,15 @@ class SoundDeviceBackend:
         self._device_sample_rate = float(info["default_samplerate"])
         self._device_name = str(info["name"])
 
+    def max_output_channels(self, device: Any = None) -> int | None:
+        """How many outputs ``device`` (``None`` = system default) has, or ``None`` if unknown."""
+        try:
+            import sounddevice as sd
+
+            return int(sd.query_devices(device, "output")["max_output_channels"]) or None
+        except Exception:
+            return None
+
     def start(self) -> None:
         s = self._stream
         if s is None:
@@ -279,6 +288,8 @@ class FakeBackend:
     the produced ``(n, channels)`` block.  Unwritten samples would show up as NaN.
     ``open_error`` / ``start_error`` (exception instances) make ``open`` / ``start``
     raise; :meth:`disconnect` simulates the device vanishing mid-stream.
+    ``max_output_channels`` (default: unlimited) makes ``open`` refuse more channels,
+    like a real stereo output does.
     ``realtime=False`` (default) exempts it from the engine's stall watchdog, since
     tests pull blocks whenever they like.
     """
@@ -292,7 +303,9 @@ class FakeBackend:
         open_error: BaseException | None = None,
         start_error: BaseException | None = None,
         realtime: bool = False,
+        max_output_channels: int | None = None,
     ) -> None:
+        self.max_channels = max_output_channels
         self.open_error = open_error
         self.start_error = start_error
         self.realtime = realtime
@@ -328,6 +341,8 @@ class FakeBackend:
     ) -> None:
         if self.open_error is not None:
             raise self.open_error
+        if self.max_channels is not None and int(channels) > self.max_channels:
+            raise RuntimeError("FakeBackend: Invalid number of channels")
         self.close()
         self.sample_rate = int(sample_rate)
         self.channels = int(channels)
@@ -340,6 +355,9 @@ class FakeBackend:
         self._open = True
         self._dead = False
         self.open_count += 1
+
+    def max_output_channels(self, device: Any = None) -> int | None:
+        return self.max_channels
 
     def start(self) -> None:
         if not self._open:
@@ -834,6 +852,17 @@ class PlaybackEngine:
                 }
             )
         return result
+
+    def max_output_channels(self) -> int | None:
+        """Outputs of the selected device (``None`` if the backend cannot tell)."""
+        fn = getattr(self._backend, "max_output_channels", None)
+        if fn is None:
+            return None
+        try:
+            n = fn(self._device)
+        except Exception:
+            return None
+        return int(n) if n else None
 
     def set_output_device(self, device_id: Any = None) -> None:
         """Select the output device (``None`` = system default).  Resumes if playing."""

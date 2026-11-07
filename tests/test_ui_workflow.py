@@ -389,3 +389,45 @@ def test_theme_is_always_dark(qtbot, monkeypatch):
         app.setStyle(style)
         app.setPalette(pal)
         app.setFont(font)
+
+
+@pytest.mark.parametrize("channels", [3, 6])
+def test_file_with_more_channels_than_the_output_plays_folded_to_stereo(qtbot, no_dialogs, monkeypatch, tmp_path,
+                                                                        channels):
+    """A 3- or 6-channel file on a stereo output (built-in speakers, headphones) could not be played
+    at all: the stream was opened with one output per file channel and the device refused it
+    ("Invalid number of channels"). Monitoring now folds such files down to the device's two
+    outputs; the project audio and exports keep every channel."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from spledio.ui.controller import EditorController
+    from spledio.ui.main_window import MainWindow
+
+    backend = FakeBackend(max_output_channels=2)
+    w = MainWindow(EditorController(playback_backend=backend))
+    qtbot.addWidget(w)
+    w.show()
+    n = SR
+    t = np.arange(n) / SR
+    tones = [0.1 * (c + 1) * np.sin(2 * np.pi * (300 + 200 * c) * t) for c in range(channels)]
+    path = str(tmp_path / "multi.wav")
+    sf.write(path, np.stack(tones, axis=1).astype(np.float32), SR, subtype="FLOAT")
+    w.open_path(path)
+    qtbot.waitUntil(lambda: w.ctl.session is not None and not w.ctl.busy, timeout=20000)
+    assert w.ctl.session.project.channels == channels
+    w.ctl.play_pause()
+    assert w.ctl.playback.is_playing, w.ctl.playback.state().error
+    assert backend.channels == 2
+    out = backend.pull(n)
+    assert np.all(np.isfinite(out))
+    # every file channel is heard on at least one side, and nothing exceeds the loudest input
+    for c in range(channels):
+        f = 300 + 200 * c
+        lv = [_tone_level(out[:, side], f, 0, n) for side in (0, 1)]
+        assert max(lv) > 0.02 * (c + 1), (c, lv)
+    assert np.max(np.abs(out)) <= 0.1 * channels + 1e-6
+    w.ctl.stop()
+    # the project keeps all channels
+    exp = str(tmp_path / "out.wav")
+    w.ctl.session.export(exp, ExportSettings(format="WAV", subtype="FLOAT"))
+    assert sf.info(exp).channels == channels
+    w.ctl.shutdown()

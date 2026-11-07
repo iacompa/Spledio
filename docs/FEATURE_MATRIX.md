@@ -98,6 +98,7 @@ Status legend:
 | Choosing the output device inside the app | Not supported yet | plays through the system default output; change it in the OS sound settings |
 | Playhead latency compensation | Implemented | relies on the latency the driver reports |
 | Mono monitored on both speakers | Implemented | monitoring only, export stays mono |
+| More channels than the output has (e.g. 6 channels on stereo speakers) monitored as a stereo fold-down | Implemented | monitoring only, export keeps every channel; see KNOWN_LIMITATIONS.md |
 
 ## Export
 

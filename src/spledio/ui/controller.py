@@ -540,7 +540,7 @@ class EditorController(QObject):
         if s is None:
             self._mix_source = None
             return
-        mix = monitor_layout(s.render_full_mix())
+        mix = self._monitor(s.render_full_mix())
         self._mix_source = ArraySource(mix, s.sample_rate, label="Mix", total_frames=s.project.n_frames)
         if self.audition.mode == "mix":
             self.playback.set_source(self._mix_source, keep_position=True)
@@ -555,13 +555,20 @@ class EditorController(QObject):
             self._rebuild_mix_source()
             return
         for _lid, a, b in change.audio:
-            buf[a:b] = monitor_layout(s.project.render_mix(a, b, dtype=np.float32)).T
+            region = self._monitor(s.project.render_mix(a, b, dtype=np.float32)).T
+            if region.shape[1] != buf.shape[1]:  # the output device changed: start over
+                self._rebuild_mix_source()
+                return
+            buf[a:b] = region
         self._mix_source = ArraySource(buf.T, s.sample_rate, label="Mix", total_frames=s.project.n_frames)
         if self.audition.mode == "mix":
             self.playback.set_source(self._mix_source, keep_position=True)
 
     def mix_source(self) -> PlaybackSource | None:
         return self._mix_source
+
+    def _monitor(self, audio: np.ndarray) -> np.ndarray:
+        return monitor_layout(audio, self.playback.max_output_channels())
 
     def set_playback_source(self, src: PlaybackSource, state: AuditionState) -> None:
         self.audition = state
@@ -574,6 +581,9 @@ class EditorController(QObject):
         if self.playback.is_playing:
             self.playback.pause()
         else:
+            out = self.playback.max_output_channels()
+            if self._mix_source is not None and out is not None and self._mix_source.channels > out:
+                self._rebuild_mix_source()  # the output device has fewer channels than when it was built
             if self.audition.mode not in ("mix", "preview", "bypass", "ab_a", "ab_b") or self.playback.source is None:
                 self.set_playback_source(self._mix_source, AuditionState())
             self._apply_loop()
@@ -677,7 +687,7 @@ class EditorController(QObject):
             }[mode]()
 
         def done(buf):
-            src = ArraySource(monitor_layout(buf.data), s.sample_rate, label=buf.label, offset=buf.start,
+            src = ArraySource(self._monitor(buf.data), s.sample_rate, label=buf.label, offset=buf.start,
                               total_frames=s.project.n_frames)
             self._play_region(src, AuditionState(mode, buf.label), buf.start, buf.end)
 
@@ -689,7 +699,7 @@ class EditorController(QObject):
             self.statusMessage.emit("No preview: set a gain and press Preview first", 4000)
             return
         start, a_reg, b_reg, label = s.ab_regions()
-        region = monitor_layout(a_reg if bypass else b_reg)
+        region = self._monitor(a_reg if bypass else b_reg)
         src = OverlaySource(self._mix_source, start, region, label="Bypass (original)" if bypass else "Preview")
         if self.playback.is_playing and self.audition.mode in ("preview", "bypass"):
             self.set_playback_source(src, AuditionState("bypass" if bypass else "preview",
@@ -718,7 +728,7 @@ class EditorController(QObject):
             self.statusMessage.emit(str(e), 4000)
             return
         going_a = self.audition.mode != "ab_a"
-        region = monitor_layout(a_reg if going_a else b_reg)
+        region = self._monitor(a_reg if going_a else b_reg)
         src = OverlaySource(self._mix_source, start, region, label="A original" if going_a else "B processed")
         st = AuditionState("ab_a" if going_a else "ab_b", ("A – original (before: " if going_a else "B – processed (") + label + ")", start)
         if self.playback.is_playing:
@@ -797,12 +807,49 @@ class EditorController(QObject):
             self.session = None
 
 
-def monitor_layout(audio: np.ndarray) -> np.ndarray:
-    """Monitoring only: duplicate mono to two channels so it plays on both speakers.
-    Project audio, edits and exports are never changed by this."""
-    if audio.shape[0] == 1:
+def monitor_layout(audio: np.ndarray, out_channels: int | None = None) -> np.ndarray:
+    """Monitoring only: fit ``(channels, frames)`` audio to the output device.
+    Project audio, edits and exports are never changed by this.
+
+    * Mono is duplicated to two channels so it plays on both speakers.
+    * Audio with more channels than the device has outputs (``out_channels``; ``None`` =
+      unknown, then nothing is folded) is folded down to stereo with :func:`fold_down_matrix`.
+    """
+    ch = audio.shape[0]
+    if ch == 1:
         return np.repeat(audio, 2, axis=0)
-    return audio
+    if out_channels is None or ch <= out_channels:
+        return audio
+    m = fold_down_matrix(ch, 2 if out_channels >= 2 else 1)
+    return (m @ np.asarray(audio, dtype=np.float64)).astype(audio.dtype, copy=False)
+
+
+def fold_down_matrix(channels: int, outputs: int = 2) -> np.ndarray:
+    """``(outputs, channels)`` monitoring fold-down, each row scaled so its coefficients sum to 1
+    (the fold-down is never louder than the loudest channel, so monitoring adds no overs).
+
+    * 6 channels are taken as 5.1 in the WAV order L R C LFE Ls Rs: left = L + 0.71·(C + LFE + Ls),
+      right = R + 0.71·(C + LFE + Rs). The channel layout stored in the file is not read, so the
+      fourth channel (LFE in 5.1) is kept too: every channel stays audible.
+    * Otherwise channels 1, 3, 5 … go left and 2, 4, 6 … right; with an odd count the last
+      channel goes to both sides at 0.71 (e.g. L R C).
+    * One output: the mean of all channels.
+    """
+    if outputs == 1:
+        return np.full((1, channels), 1.0 / channels)
+    m = np.zeros((2, channels))
+    g = math.sqrt(0.5)
+    if channels == 6:
+        m[0, [0, 2, 3, 4]] = (1.0, g, g, g)
+        m[1, [1, 2, 3, 5]] = (1.0, g, g, g)
+    else:
+        last = channels - 1 if channels % 2 else None
+        for c in range(channels):
+            if c == last:
+                m[:, c] = g
+            else:
+                m[c % 2, c] = 1.0
+    return m / m.sum(axis=1, keepdims=True)
 
 
 def _padded(provider, n_frames: int, channels: int):

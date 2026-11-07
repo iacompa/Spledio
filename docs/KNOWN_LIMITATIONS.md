@@ -25,6 +25,12 @@ Honest list of what is missing, rough, or only partly verified. See
   every lossy file with a single read.
 * **Output device**: Spledio plays through the system default output. There is no device picker in the app
   yet; change the output in the operating system's sound settings and press Play again.
+* **Monitoring more channels than the output has**: a file with more channels than the output device
+  (for example 6 channels on the built-in speakers or headphones) is *heard* as a stereo fold-down:
+  channels 1, 3, 5 … left and 2, 4, 6 … right (a lone last channel on both sides), and 6-channel files as
+  5.1 (L R C LFE Ls Rs, centre, LFE and the surrounds at −3 dB), scaled so the fold-down is never louder
+  than the loudest channel. The file's own channel layout is not read. Editing and export keep every
+  channel.
 * **Markers / regions UI**: markers are stored in the project model and file but have no editor yet.
 * **Undo history is not persisted** in the project; reopening starts a fresh history (the edited audio
   itself is restored exactly).
