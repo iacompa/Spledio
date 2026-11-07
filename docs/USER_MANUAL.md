@@ -173,7 +173,9 @@ Other tools, all undoable:
 
 * **Save Project** (⌘S) stores a `.spledio` file with your layers, areas and edits. Reopening it gives
   exactly the same sound, and your adjusted areas can still be changed.
-  The undo history itself is not saved.
+  The undo history itself is not saved. If the original audio file was changed by another program while
+  the project was open, saving still works: the project then keeps a full copy of the edited audio
+  instead of referring to the changed file (a larger file).
 * **Portable project** also stores a copy of the original audio inside the project file, so it still
   works if you move or delete the original.
 * **Export Audio** (⌘E) writes WAV (16-bit, 24-bit or 32-bit float) or FLAC (16 or 24-bit), at the

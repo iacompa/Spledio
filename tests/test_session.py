@@ -398,6 +398,49 @@ def test_missing_media_relink_and_checksum(tmp_path):
         EditorSession.open_project(proj, relink={aid: wrong})
 
 
+
+def test_save_still_works_after_the_source_file_changed(tmp_path):
+    """If the source file is changed on disk after it was opened (or a project was opened with
+    "Use it anyway" on a different file), saving used to fail with a checksum error every time,
+    autosave included, so the work could not be kept. The layers are in memory: they are now
+    stored in full instead of relative to the changed file."""
+    src = make_wav(str(tmp_path / "a.wav"), subtype="PCM_24")
+    s = EditorSession.from_audio_file(src)
+    s.set_selection(Selection.of(RectShape(0.5, 2.5, 2300, 2700)))
+    s.apply_gain(-6.0)
+    mix = s.project.render_mix()
+    data, _ = sf.read(src, always_2d=True)
+    sf.write(src, 0.5 * data, SR, subtype="PCM_24")  # changed behind the app's back
+    proj = str(tmp_path / "p.spledio")
+    s.save(proj)
+    assert not s.dirty
+    s.close()
+    s2 = EditorSession.open_project(proj)
+    np.testing.assert_array_equal(s2.project.render_mix(), mix)
+    s2.close()
+    # "Use it anyway": open a project whose source differs, edit, save, reopen
+    sf.write(src, data, SR, subtype="PCM_24")
+    s3 = EditorSession.from_audio_file(src)
+    s3.set_selection(Selection.of(RectShape(0.5, 2.5, 2300, 2700)))
+    s3.apply_gain(-6.0)
+    s3.save(proj)
+    s3.close()
+    sf.write(src, 0.25 * data, SR, subtype="PCM_24")
+    with pytest.raises(AssetMismatchError):
+        EditorSession.open_project(proj)
+    from spledio.persistence.project_file import load_project
+
+    s4 = load_project(proj, allow_checksum_mismatch=True)
+    s4.set_selection(Selection.of(RectShape(0.1, 0.4, 2300, 2700)))
+    s4.apply_gain(-3.0)
+    mix4 = s4.project.render_mix()
+    s4.save(proj)
+    s4.close()
+    s5 = EditorSession.open_project(proj)
+    np.testing.assert_array_equal(s5.project.render_mix(), mix4)
+    s5.close()
+
+
 def test_unedited_project_stores_no_audio_blocks(session, tmp_path):
     proj = str(tmp_path / "plain.spledio")
     session.save(proj)

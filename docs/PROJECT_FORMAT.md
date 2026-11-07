@@ -33,7 +33,11 @@ Each layer has a **base**:
 On save, the layer is compared to its base in 8192-frame blocks; only blocks
 that differ (exact comparison) are written. An unedited imported layer stores
 nothing. On load, the base is decoded (and its SHA-256 verified) and the stored
-blocks are written over it. This reproduces the edited audio **bit-exactly**
+blocks are written over it. If the source file is missing, or no longer matches its
+SHA-256 when the project is saved (changed on disk, or a project opened with a
+different file accepted), the layer is saved relative to silence instead, so every
+block is stored and the project no longer needs that file (a portable save refuses
+a changed source instead of embedding it). This reproduces the edited audio **bit-exactly**
 without replaying DSP and without any model or cache.
 
 ## manifest.json
