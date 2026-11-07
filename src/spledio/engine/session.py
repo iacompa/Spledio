@@ -489,9 +489,10 @@ class EditorSession:
         """Move (or copy) the selected component into a new time-aligned layer.
 
         Move: new = c, remainder = x - c, so new + remainder == x (float64 exact,
-        then rounded once to the storage dtype). Copy keeps the source; the
-        summed level of the two layers can then increase (up to +6 dB where
-        the copy fully overlaps).
+        then rounded once to the storage dtype). The new layer takes the source
+        layer's gain, polarity, mute and solo, so a move leaves the mix
+        unchanged. Copy keeps the source; the summed level of the two layers can
+        then increase (up to +6 dB where the copy fully overlaps).
         """
         with self._lock:
             sel = self.selection_or_error()
@@ -510,6 +511,10 @@ class EditorSession:
                 name=name or f"{layer.name} – {'copy' if copy else 'extract'} {len(self.project.layers)}",
                 audio=new_audio,
                 color=self.project.next_color(),
+                gain_db=layer.gain_db,
+                mute=layer.mute,
+                solo=layer.solo,
+                polarity_inverted=layer.polarity_inverted,
                 base={"type": "silence"},
                 provenance=f"{verb.lower()} from '{layer.name}': {self.selection_label(sel)}",
             )

@@ -129,6 +129,26 @@ def test_extract_and_copy_layer_semantics(session):
     assert level(mix[0], 2500, a, b) == pytest.approx(2 * level(mix0[0], 2500, a, b), rel=1e-3)
 
 
+
+@pytest.mark.parametrize("props", [{"gain_db": -12.0}, {"polarity_inverted": True},
+                                   {"gain_db": 4.0, "polarity_inverted": True}, {"mute": True}],
+                         ids=["gain", "polarity", "gain+polarity", "muted"])
+def test_extract_keeps_the_mix_when_the_source_layer_has_gain_or_polarity(session, props):
+    """Extract moves content into a new layer; the new layer must play at the source layer's
+    gain and polarity (and mute), otherwise the moved content changes level in the mix. It used
+    to be created at 0 dB / normal polarity: from a -12 dB layer the extract came out 12 dB louder."""
+    s = session
+    s.set_layer_props(s.active_layer_id, **props)
+    mix0 = s.project.render_mix()
+    s.set_selection(Selection.of(RectShape(0.5, 2.5, 2300, 2700)))
+    s.extract_to_new_layer()
+    assert np.max(np.abs(s.project.render_mix() - mix0)) < 1e-6
+    src, new = s.project.layers
+    assert {k: getattr(new, k) for k in props} == props
+    s.undo()
+    assert len(s.project.layers) == 1 and np.max(np.abs(s.project.render_mix() - mix0)) == 0.0
+
+
 def test_solo_mute_rules(session):
     s = session
     s.set_selection(Selection.of(RectShape(0.5, 2.5, 2300, 2700)))

@@ -153,7 +153,8 @@ Other tools, all undoable:
 * **Brushes:** reduce (**Shift+R**), amplify (**Shift+A**) and transfer to another layer (**Shift+T**).
   One stroke is one undo step.
 * **Layers:** extract (⌘J) or copy (⌘⇧J) the selected sound to its own layer, then mute, solo or change
-  the level of each layer. You can export layers as separate files (stems).
+  the level of each layer. A new layer starts at the level, polarity, mute and solo of the layer it came
+  from, so the mix sounds the same until you change it. You can export layers as separate files (stems).
 * **Time:** delete or crop time, and insert silence. These change the length of the whole project.
 
 ---

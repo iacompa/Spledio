@@ -238,7 +238,7 @@ class MainWindow(QMainWindow):
                      c.delete_or_remove, "Edit", ("Delete", "Backspace"), "delete", self._need_area_target,
                      changes_audio=True, undoable=True, acts_on="selection / picked area", text_safe=False))
         A(ActionSpec("edit.extract", "Extract to New Layer",
-                     "Move the selected content to a new aligned layer; remainder + extract = original at unity gain",
+                     "Move the selected content to a new aligned layer at the same level; remainder + extract = original",
                      lambda: c.extract(False), "Edit", "Ctrl+J", "extract", self._need_editable_sel, changes_audio=True,
                      undoable=True, acts_on="selection → new layer"))
         A(ActionSpec("edit.copy_to_layer", "Copy to New Layer",
