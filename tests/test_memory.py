@@ -209,3 +209,19 @@ def test_area_components_stay_in_ram_when_undo_data_moves_to_disk(tmp_path):
     store = sess.history.store
     assert store.disk_count >= 2 and a.component in store._ram  # undo data went to disk first
     sess.close()
+
+
+def test_clip_check_peak_is_the_whole_region_peak(s, monkeypatch):
+    import spledio.engine.session as session_mod
+
+    monkeypatch.setattr(session_mod, "MIX_BLOCK", 1000)  # many blocks over the region
+    p = s.project
+    p.layers[0].audio[1, 123_456] = 3.0
+    for a, b in ((0, p.n_frames), (100_000, 200_001), (-50, 10), (5, 5), (p.n_frames - 7, p.n_frames + 9)):
+        mix = p.render_mix(a, b)
+        want = float(np.max(np.abs(mix))) if mix.size else 0.0
+        warnings = []
+        assert s._check_clip(a, b, warnings) == want
+        assert bool(warnings) == (want > 1.0)
+    p.layers[0].audio[0, 150_000] = np.nan
+    assert math.isnan(s._check_clip(100_000, 200_001, []))

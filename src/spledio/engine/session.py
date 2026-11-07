@@ -38,7 +38,7 @@ from spledio.commands.history import (
     read_rows,
     write_rows,
 )
-from spledio.domain.project import Asset, BlockAudio, Layer, Project, new_id
+from spledio.domain.project import MIX_BLOCK, Asset, BlockAudio, Layer, Project, new_id
 from spledio.engine.areas import (
     MERGE_WINDOW_S,
     AdjustArea,
@@ -409,8 +409,12 @@ class EditorSession:
         }
 
     def _check_clip(self, start: int, end: int, warnings: list[str]) -> float:
-        mix = self.project.render_mix(start, end)
-        peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+        # Peak of the float64 mix, block by block (no float64 copy of a long region; np.max
+        # over the block peaks keeps a NaN, as the whole-region max did).
+        mix = self.project.mix_view(start, end)
+        ch, n = mix.shape
+        peaks = [np.max(np.abs(mix[:, a : min(n, a + MIX_BLOCK)])) for a in range(0, n, MIX_BLOCK)] if ch else []
+        peak = float(np.max(peaks)) if peaks else 0.0
         if peak > 1.0:
             warnings.append(
                 f"The mix now peaks at {20 * math.log10(peak):+.2f} dBFS in the edited region. Nothing was clipped "
