@@ -64,7 +64,9 @@ That's it. The rest of this manual explains what else you can do.
 Hover the mouse over the picture to read the exact time, pitch (Hz and musical note) and level at the
 bottom of the window.
 
-**Zoom:** ⌘= / ⌘− (time), ⌘⇧↑ / ⌘⇧↓ (pitch), ⌘0 shows the whole file, ⌘⇧E zooms to the selection.
+**Zoom:** the bar under the spectrogram has **Zoom − / +** (time), **Frequency − / +** (pitch, the height),
+**Whole File** and **Selection**. On a trackpad, **pinch** over the spectrogram to zoom in time.
+Keys: ⌘= / ⌘− (time), ⌘⇧↑ / ⌘⇧↓ (pitch), ⌘0 shows the whole file, ⌘⇧E zooms to the selection.
 Scroll to move along in time, ⌘+scroll zooms time, Shift+scroll zooms pitch. **H** is the hand tool for dragging the view.
 
 ---
@@ -100,8 +102,9 @@ silenced audio can always be brought back.
 * **Click inside an outlined area** to pick it again. The level bar and the keys then change that area.
 * **Delete**, or **✕** on the level bar, removes an area's change. The audio there comes back **exactly**,
   and the other areas are not affected.
-* **Highlight** (toolbar button, **Shift+H**, on by default) hides the outlines when there are many.
-  This only changes the display, not the sound. The picked area stays visible.
+* **Show / Hide** next to *Adjusted areas*, at the bottom right under the spectrogram (or **Shift+H**),
+  shows or hides the outlines of every part you changed. Shown by default. This only changes the display,
+  not the sound. The picked area stays visible.
 * The **Adjusted Areas** panel lists every area. You can type a level, silence an area, remove one, or
   remove all of them at once.
 
@@ -192,7 +195,7 @@ Other tools, all undoable:
 | Quieter / louder 1 dB | ↓ / ↑ (or − / +) |
 | Quieter / louder 6 dB | Shift+↓ / Shift+↑ |
 | Silence / remove adjustment | 0 / Delete |
-| Highlight areas on/off | Shift+H |
+| Show / hide adjusted areas | Shift+H |
 | Rectangle / time / frequency tool | M / T / F |
 | Select all / deselect | ⌘A / ⌘D |
 | Zoom time / pitch | ⌘= ⌘− / ⌘⇧↑ ⌘⇧↓ |

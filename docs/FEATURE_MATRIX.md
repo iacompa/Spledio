@@ -31,7 +31,7 @@ Status legend:
 | Linear / logarithmic frequency scale, note labels | Implemented | |
 | Colour maps: ember, ice, grayscale, viridis-like, cividis-like | Implemented | last two approximate the published maps |
 | dB range, gamma, overlay opacity | Implemented | never affect audio |
-| Zoom/pan time & frequency, fit project / selection, overview strip | Implemented | |
+| Zoom/pan time & frequency, fit project / selection, overview strip | Implemented | zoom buttons in the bar under the spectrogram, ⌘/Ctrl+scroll, Shift+scroll, trackpad pinch. `test_ui_areas.py` |
 | Waveform strip, crosshair readout (time, Hz, note, dB) | Implemented | |
 | Channel view: mix / left / right / per channel | Implemented | |
 | Display active layer vs. composite of all layers | Implemented | |
@@ -61,7 +61,7 @@ Status legend:
 | Areas stay outlined with their level; click to pick and re-adjust; Delete removes the adjustment exactly | Implemented | overlapping areas removed in any order restore the original (tested) |
 | Level bar next to the selection: − / + (1 dB, hold to repeat), slider, ▶ play in mix, Silence, ✕ remove | Implemented | `test_ui_areas.py::test_level_bar_next_to_selection_buttons_and_slider`; checked in the real app |
 | No blinking while levels change (previous spectrogram kept until the new tiles are ready; quick jobs don't grey out the UI) | Implemented | `test_rendering.py::test_edit_keeps_previous_image_until_new_tiles_are_ready` |
-| "Highlight" toggle hides area outlines (picked area stays visible); Adjusted Areas panel | Implemented | display only |
+| Show / Hide buttons under the spectrogram (and Shift+H) hide area outlines (picked area stays visible); Adjusted Areas panel | Implemented | display only. `test_ui_areas.py` |
 | Areas saved in the project and re-adjustable after reopening | Implemented | `test_areas.py::test_areas_survive_save_and_reopen` |
 | Mute / delete spectral content | Implemented | ≥ 60 dB attenuation |
 | Preview / Bypass / A-B / Apply / Cancel workflow | Implemented | preview == commit == export (tested) |

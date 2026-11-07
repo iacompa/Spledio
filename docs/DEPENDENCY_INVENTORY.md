@@ -209,8 +209,9 @@ When distributing:
 4. Static linking of mpg123/LAME into an LGPL library that is itself
    distributed as a replaceable dylib with source satisfies relinking: the
    user can rebuild the whole dylib.
-5. Spledio itself imports only uncompressed/lossless formats and exports only
-   WAV/FLAC, but the dylib contains all codecs, so all notices apply.
+5. Spledio imports WAV/AIFF/FLAC/CAF and the lossy MP3, Ogg Vorbis and Opus
+   (decoded by the mpg123, libvorbis and libopus inside the dylib) and exports only
+   WAV/FLAC. The dylib contains all codecs, so all notices apply.
 
 ## FFmpeg: not used by Spledio, not to be bundled
 

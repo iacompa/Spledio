@@ -37,7 +37,7 @@ def run(app, win, path: str, timeout: float = 60.0, on_done=None, play_silence: 
     (default: ``app.exit(code)``). ``play_silence=False`` skips opening the real output device
     (for the headless test suite)."""
     from PySide6.QtCore import QTimer
-    from PySide6.QtWidgets import QPlainTextEdit
+    from PySide6.QtWidgets import QApplication, QMessageBox, QPlainTextEdit
 
     results: list[tuple[str, bool, str]] = []
     tmp = tempfile.mkdtemp(prefix="spledio-smoke-")
@@ -155,10 +155,27 @@ def run(app, win, path: str, timeout: float = 60.0, on_done=None, play_silence: 
               f"{state['calls'][0]} callbacks on {name}, latency {lat * 1000:.1f} ms")
         s1c_open()
 
+    def refusal():
+        """The error box the app shows when it cannot open the file, if one is up."""
+        box = QApplication.activeModalWidget()
+        return box if isinstance(box, QMessageBox) else None
+
     @step
     def s1c_open() -> None:
         win.open_path(os.path.abspath(path))
-        wait(lambda: ctl.session is not None and not ctl.busy, s2_opened, "open audio file")
+        # a file the app refuses never opens: report its message now, not a timeout a minute later
+        wait(lambda: refusal() is not None or (ctl.session is not None and not ctl.busy), s1d_opened_or_refused,
+             "open audio file")
+
+    @step
+    def s1d_opened_or_refused() -> None:
+        box = refusal()
+        if box is None:
+            s2_opened()
+            return
+        check("open audio file", False, f"refused: {box.text()}")  # macOS message boxes have no title
+        box.reject()
+        finish()
 
     @step
     def s2_opened() -> None:

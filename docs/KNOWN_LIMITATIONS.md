@@ -15,8 +15,14 @@ Honest list of what is missing, rough, or only partly verified. See
 * **Plugin hosting** (VST3/AU/LV2/CLAP). Not planned for v1.
 * **Exports**: only WAV (PCM 16/24, float 32) and FLAC (16/24). No AIFF, OGG, MP3 or 32-bit integer export,
   even though 32-bit integer and 64-bit float sources import (and are edited in float64).
-* **Imports**: whatever libsndfile reads (WAV, AIFF, FLAC, OGG/Vorbis, Opus, MP3 with libsndfile ≥ 1.1).
-  No video containers, no AAC/M4A.
+* **Imports**: WAV (also WAVEX, RF64, W64), AIFF, FLAC, CAF and the lossy MP3, Ogg Vorbis and Opus
+  (decoded by the mpg123, libvorbis and libopus built into the bundled libsndfile). No video containers,
+  no AAC/M4A, no ADPCM or GSM inside WAV. A lossy import is decoded once to 32-bit float; editing it and
+  exporting WAV or FLAC does not bring back what the MP3/OGG encoder removed. An MP3 without length
+  information (a VBR file missing its Xing/Info header) is refused with a message instead of being cut
+  short: libsndfile would stop decoding at its length estimate. Convert such a file to WAV or FLAC first.
+  libsndfile 1.2.2's MP3 decoder gives wrong samples when a stream is read in pieces, so Spledio decodes
+  every lossy file with a single read.
 * **Output device**: Spledio plays through the system default output. There is no device picker in the app
   yet; change the output in the operating system's sound settings and press Play again.
 * **Markers / regions UI**: markers are stored in the project model and file but have no editor yet.
@@ -36,7 +42,12 @@ Honest list of what is missing, rough, or only partly verified. See
   refuse / reduce level / limit / hard-clip. 32-bit float export never clips.
 * **Whole-file in memory.** Each layer is held in RAM (float32 by default). A 60-minute stereo 48 kHz
   file ≈ 1.4 GB per layer. Undo patches spill to disk above a RAM budget, but layers themselves do not.
-  Very long files with many layers can exhaust memory.
+  Very long files with many layers can exhaust memory. Measured in the running app (2026-11-07, 44.1 kHz
+  stereo, one layer): a 10-minute file uses about 1.5 GB once its spectrogram is drawn and a 30-minute file
+  about 1.6 GB (the display cache is capped at 512 MB); one adjusted area adds about 4 to 5 times the audio
+  it covers (0.9 GB for 5 minutes, 2.9 GB for 25 minutes), and an export briefly needs about twice the
+  audio again. Songs and recordings up to about 15 minutes are comfortable on a Mac with 8 GB; much
+  longer files work but slow down once macOS runs short of memory.
 * **Delete/crop time and insert silence** ripple every layer and are undoable, but they are full-array
   operations (fast enough for normal files, but not chunked).
 * **Display at extreme zoom-out** decimates analysis frames (power-of-two stride). A very short event
@@ -50,7 +61,9 @@ Honest list of what is missing, rough, or only partly verified. See
   keyboard focus (the hint bar says "Click the spectrogram, then …" otherwise), so lists and number boxes
   keep their own arrow keys. Zoom is on Ctrl/Cmd+= / Ctrl/Cmd+− and Ctrl/Cmd+Shift+↑/↓.
 * **Area memory.** Each area keeps its component (the audio it covered) in the undo store and in the
-  project file: a full-length stereo area of a 10-minute 48 kHz file is about 230 MB in float32.
+  project file: a full-length stereo area of a 10-minute 48 kHz file is about 230 MB in float32 on disk.
+  In the running app an area costs more, about 4 to 5 times the audio it covers (see *Whole-file in
+  memory*).
 * **viridis-like / cividis-like** colour maps are approximations, not the exact published tables.
 * **Playback latency compensation** uses the latency PortAudio reports; Bluetooth outputs often
   report it inaccurately, so the playhead can visibly lead/lag on them.

@@ -10,6 +10,7 @@ once to prove no button is dead or crashes.
 from __future__ import annotations
 
 import os
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -233,3 +234,158 @@ def test_smoke_test_mode_passes_on_a_real_window(qtbot, win, tmp_path):
     names = [r[0] for r in done["results"]]
     assert "all dock panels loaded" in names and "WAV export equals the playback mix" in names
     assert len(names) == 8
+
+
+
+def test_smoke_test_reports_a_refused_file_at_once(qtbot, win, tmp_path, monkeypatch):
+    """A file the app cannot open fails the smoke test with the app's own message, without waiting
+    for the timeout behind the error box."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from spledio import smoke_test
+
+    boxes = []
+
+    def critical(parent, title, text, *a, **k):  # like the real box: stays up until something closes it
+        box = QMessageBox(QMessageBox.Critical, title, text, QMessageBox.Ok, parent)
+        box.setWindowModality(Qt.ApplicationModal)
+        box.show()
+        boxes.append(box)
+        return QMessageBox.Ok
+
+    monkeypatch.setattr(QMessageBox, "critical", staticmethod(critical))
+
+    bad = tmp_path / "not-audio.wav"
+    bad.write_bytes(b"this is not audio" * 100)
+    done = {}
+    t0 = time.monotonic()
+    smoke_test.run(QApplication.instance(), win, str(bad),
+                   on_done=lambda code, results: done.update(code=code, results=results), play_silence=False)
+    qtbot.waitUntil(lambda: "code" in done, timeout=30000)
+    assert time.monotonic() - t0 < 20
+    assert done["code"] == 1
+    name, ok, detail = done["results"][-1]
+    assert name == "open audio file" and not ok
+    assert detail.startswith("refused: Cannot import 'not-audio.wav'")
+    assert len(boxes) == 1 and not boxes[0].isVisible()  # the error box was closed
+
+
+def test_mp3_edit_save_reopen_and_time_readout(qtbot, win, tmp_path):
+    """An MP3 opens (the website and manual promise it), the time readout shows the new file's
+    length right away, and a saved project reopens with exactly the same audio."""
+    from spledio.ui.main_window import AUDIO_FILTER
+
+    for ext in ("*.mp3", "*.ogg", "*.opus", "*.wav", "*.flac", "*.aiff"):  # File ▸ Open lists them
+        assert ext in AUDIO_FILTER.split(";;")[0], ext
+    w = win
+    _open(qtbot, w, _fixture(str(tmp_path / "first.wav")))  # 6 s
+    assert w.time_label.text() == "0:00.000 / 0:06.000"
+    t = np.arange(9 * 44100) / 44100
+    x = 0.3 * np.sin(2 * np.pi * 330 * t) + 0.1 * np.sin(2 * np.pi * 2500 * t)
+    mp3 = str(tmp_path / "song.mp3")
+    sf.write(mp3, np.stack([x, x], axis=1), 44100, format="MP3", subtype="MPEG_LAYER_III")
+    _open(qtbot, w, mp3)
+    s = w.ctl.session
+    assert s.project.sample_rate == 44100 and s.project.channels == 2
+    assert w.time_label.text().endswith("/ 0:09.000")  # not the previous file's 0:06.000
+    w.ctl.commit_selection_shape(RectShape(2.0, 7.0, 2300, 2700))
+    w.ctl.adjust_area(-1, True)  # Shift+Down: -6 dB
+    _idle(qtbot, w)
+    edited = s.project.layers[0].audio.astype(np.float64).copy()
+    proj = str(tmp_path / "song.spledio")
+    s.save(proj)
+    w.open_project(proj)
+    qtbot.waitUntil(lambda: w.ctl.session is not s, timeout=20000)
+    _idle(qtbot, w)
+    assert np.array_equal(w.ctl.session.project.layers[0].audio.astype(np.float64), edited)
+    assert [a.gain_db for a in w.ctl.session.areas] == [-6.0]
+    assert not w._errors, w._errors
+
+
+def test_no_leftover_panel_tab_bars_over_the_panels(qtbot, win, tmp_path):
+    """Qt 6 leaves the tab bars of earlier dock layouts on screen (after tabifyDockWidget and every
+    restoreState): a loose "Resonance Workflow" tab drawn over the Reduce panel's buttons. Only the
+    bars Qt uses may stay visible, right under their panel, and the panels keep their width. Checked
+    at first show, after Focus mode on/off, and in a second window that restores the saved layout
+    (every launch after the first)."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QTabBar
+
+    from spledio.ui.controller import EditorController
+    from spledio.ui.main_window import MainWindow
+
+    def check(w):
+        def bars():
+            return [tb for tb in w.findChildren(QTabBar, options=Qt.FindChildOption.FindDirectChildrenOnly)
+                    if tb.isVisible()]
+
+        qtbot.waitUntil(lambda: len(bars()) == 2, timeout=5000)
+        qtbot.wait(50)
+        assert len(bars()) == 2
+        for tb in bars():
+            tabs = [tb.tabText(i) for i in range(tb.count())]
+            under = [d for d in w.docks.values() if d.isVisible() and d.windowTitle() in tabs
+                     and abs(tb.x() - d.x()) <= 3 and abs(tb.width() - d.width()) <= 3
+                     and 0 <= tb.y() - d.geometry().bottom() <= 6]
+            assert under, (tabs, tb.geometry(), [(d.windowTitle(), d.geometry()) for d in w.docks.values()])
+        assert w.docks["layers"].width() >= 250  # the cleanup must not squeeze the panels
+
+    check(win)
+    # a leftover the way Qt leaves one (seen in the real app with the real audio device; in this test
+    # setup Qt happens to clear its own leftovers): the cleanup hides it and keeps the real bars
+    stray = QTabBar(win)
+    for t in ("Reduce Selected Sound", "Adjusted Areas", "Resonance Workflow"):
+        stray.addTab(t)
+    stray.setGeometry(842, 238, 518, 31)
+    stray.show()
+    assert stray.isVisible()
+    win._hide_stale_tab_bars()
+    qtbot.wait(20)
+    assert not stray.isVisible()
+    check(win)
+
+    win.actions["view.focus"].trigger()  # hides the panels (saveState)
+    qtbot.wait(50)
+    win.actions["view.focus"].trigger()  # back (restoreState)
+    check(win)
+
+    win.close()  # saves the layout; the next window restores it, as the next launch does
+    w2 = MainWindow(EditorController(playback_backend=FakeBackend()))
+    qtbot.addWidget(w2)
+    w2.resize(1400, 900)
+    w2.show()
+    try:
+        check(w2)
+    finally:
+        w2.ctl.shutdown()
+
+
+def test_theme_is_always_dark(qtbot, monkeypatch):
+    """No light theme: the palette is dark and the system is asked for its dark appearance too,
+    so the title bar, menus and Open/Save panels stay dark on a Mac set to light mode. (The
+    offscreen test platform ignores that request; on macOS the app's NSAppearance becomes
+    DarkAqua, checked in a real window on 2026-11-07.)"""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPalette, QStyleHints
+    from PySide6.QtWidgets import QApplication
+
+    from spledio.ui import theme
+
+    app = QApplication.instance()
+    asked = []
+    monkeypatch.setattr(QStyleHints, "setColorScheme", lambda self, scheme: asked.append(scheme))
+    saved = (app.palette(), app.styleSheet(), app.style().name(), app.font())
+    try:
+        theme.apply_theme(app)
+        assert asked == [Qt.ColorScheme.Dark]
+        for role in (QPalette.Window, QPalette.Base, QPalette.Button):
+            assert app.palette().color(role).lightness() < 60, role
+        assert app.palette().color(QPalette.WindowText).lightness() > 180
+        assert not [n for n in dir(theme) if "light" in n.lower()]  # no light variant to switch to
+    finally:
+        pal, sheet, style, font = saved
+        app.setStyleSheet(sheet)
+        app.setStyle(style)
+        app.setPalette(pal)
+        app.setFont(font)

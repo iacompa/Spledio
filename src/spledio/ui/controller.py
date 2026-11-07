@@ -129,6 +129,7 @@ class EditorController(QObject):
         self._rebind_analyzer()
         self.playback.seek(0)
         self.sessionReplaced.emit()
+        self.playheadChanged.emit(0)  # the time readout shows the new project's length right away
         self.dirtyChanged.emit(session.dirty)
 
     def _on_session_event(self, ev: SessionEvent) -> None:

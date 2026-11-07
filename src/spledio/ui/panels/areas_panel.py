@@ -4,8 +4,8 @@ Select something on the spectrogram and press ↑/↓ (or +/−) to make it loud
 or quieter; it becomes an *adjusted area* that stays outlined. This panel
 lists them: click one to pick it again (the arrow keys then act on it), type
 a level, silence it, or remove its adjustment (the audio there comes back
-exactly; other areas are not affected). "Highlight" shows or hides the
-outlines on the spectrogram.
+exactly; other areas are not affected). "Show areas on the spectrogram" (also the Show / Hide
+buttons under the spectrogram) shows or hides the outlines.
 """
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ class AreasPanel(PanelBase):
         lay.addWidget(how)
 
         top = QHBoxLayout()
-        self.highlight = QCheckBox("Highlight areas")
+        self.highlight = QCheckBox("Show areas on the spectrogram")
         self.highlight.setToolTip("Show every adjusted area outlined with its level on the spectrogram "
                                   "(display only). Turn off when there are many.")
         self.highlight.toggled.connect(self._on_highlight)

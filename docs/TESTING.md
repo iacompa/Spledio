@@ -16,21 +16,21 @@ This page records only what was actually run. Nothing here is projected or assum
 .venv/bin/python -m pytest -q
 ```
 
-Result: **425 passed, 1 skipped in 45 s** (426 collected) on 2026-11-07, and again in the release script's
-run before the latest packaged build. The skipped test needs a real audio device
-(`SPLEDIO_AUDIO_TEST=1`). `tests/test_licenses.py` covers Help ▸ Licenses and Notices, the About box
+Result: **437 passed in 37 s** with `SPLEDIO_AUDIO_TEST=1` (the real audio device test included) on
+2026-11-07, after the MP3/Ogg import fixes and the zoom / Show-Hide bar. Without that variable the
+real-device test is skipped (436 passed, 1 skipped). `tests/test_licenses.py` covers Help ▸ Licenses and Notices, the About box
 credits, the license texts the app must carry, and the checksum table in `THIRD_PARTY_NOTICES.md`. The time varies a lot with how busy the machine is: one run took 133 s, and one
 during heavy load took 412 s. That slow run exposed a real bug: quick level presses could become
 separate undo steps when rendering was slow. It is fixed, and a regression test was added
 (`test_merge_counts_from_the_press_not_from_when_rendering_finished`).
 
-The skipped test is `tests/test_playback.py` real-device test. It is opt-in because it plays sound
-through the default output (`SPLEDIO_AUDIO_TEST=1`). It was **not** run for this record. Real-device
-playback was instead checked in the real-app run below.
+The real-device test in `tests/test_playback.py` is opt-in because it plays sound through the default
+output (`SPLEDIO_AUDIO_TEST=1`). It passed in the run above. Real-device playback was also checked in the
+real-app run below.
 
 | File | Tests | What it covers |
 |---|---:|---|
-| `test_audio_io.py` | 103 | import of every PCM/float subtype and container libsndfile offers, channel counts, metadata, errors |
+| `test_audio_io.py` | 106 | import of every PCM/float subtype and container libsndfile offers, MP3 / Ogg Vorbis / Opus decoded whole and repeatably (libsndfile's MP3 decoder is wrong when read in pieces), an MP3 without length information refused instead of cut short, channel counts, metadata, errors |
 | `test_export.py` | 80 | WAV/FLAC subtypes, dither, clipping policies, SRC, overwrite protection, export == mix |
 | `test_core_dsp.py` | 74 | STFT perfect reconstruction, selective gain accuracy, untouched samples bit-identical, selections, feather, resonance finder (incl. a ring that lasts only part of the file) |
 | `test_playback.py` | 36 | transport, loop, audition modes, A/B, device loss, latency compensation (fake device) |
@@ -40,8 +40,8 @@ playback was instead checked in the real-app run below.
 | `test_ui_canvas.py` | 20 | canvas tools, selection drawing, zoom/pan, crosshair |
 | `test_ui_modules.py` | 12 | Preview / Bypass / Apply / Cancel through the Edit panel, tutorials |
 | `test_areas.py` | 11 | adjusted areas: 1 dB / 6 dB step sequence, silence and back is exact, independent and overlapping areas, merge of rapid presses into one undo step (counted from the key press, so a slow render does not split them), locked layer, removed area refused, save/reopen, timeline freeze + undo |
-| `test_ui_areas.py` | 4 | real main window: ↑/↓/+/−/Shift/0 keys, click-to-pick, Delete removes, Highlight toggle, Areas panel, level bar (− / + / slider / Silence / ✕, placement, no busy flash, actions not left disabled), zoom shortcuts |
-| `test_ui_workflow.py` | 4 | real main window, core resonance workflow end to end, every enabled action triggered once without error, `--smoke-test` mode passes |
+| `test_ui_areas.py` | 8 | real main window: ↑/↓/+/−/Shift/0 keys, click-to-pick, Delete removes, Show / Hide areas (bar under the spectrogram, Shift+H, Areas panel stay in step), level bar (− / + / slider / Silence / ✕, placement, no busy flash, actions not left disabled), zoom shortcuts, zoom buttons fully readable at 1440 and 1024 px and zooming, trackpad pinch |
+| `test_ui_workflow.py` | 8 | real main window, core resonance workflow end to end, every enabled action triggered once without error, `--smoke-test` mode passes and reports a refused file at once, an MP3 opened (File ▸ Open lists MP3/OGG/Opus), edited, saved and reopened, the time readout showing the new file's length at once, no leftover panel tab bars over the panels, always dark |
 
 UI tests run headless (`QT_QPA_PLATFORM=offscreen`) against the real `MainWindow` with a fake audio device
 whose output buffer is pulled and measured.
