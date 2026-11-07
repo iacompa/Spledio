@@ -218,8 +218,13 @@ class EditorController(QObject):
         return self._busy
 
     def run_job(self, label: str, fn: Callable[[threading.Event], object], on_done: Callable[[object], None] | None = None,
-                on_error: Callable[[BaseException], None] | None = None, quiet: bool = False) -> bool:
+                on_error: Callable[[BaseException], None] | None = None, quiet: bool = False,
+                prepare: Callable[[], None] | None = None) -> bool:
         """Run ``fn(cancel_event)`` on a worker; ``on_done(result)`` on the GUI thread.
+
+        ``prepare()`` runs on the GUI thread just before the job starts (not when the job is
+        refused because another one is running): session state the job depends on, such as the
+        selection's channel scope, is changed there, never from the worker.
 
         ``quiet`` (quick jobs such as area level changes): never announce ``busyChanged`` – the
         toolbar and panels must not grey out and back on every key press – and only show the
@@ -228,6 +233,8 @@ class EditorController(QObject):
         if self._busy:
             self.statusMessage.emit("Busy: wait for the current operation or press Esc to cancel it", 4000)
             return False
+        if prepare is not None:
+            prepare()
         self._busy = True
         self.job_label = label
         self._job_cancel = threading.Event()
@@ -295,7 +302,8 @@ class EditorController(QObject):
             self.error.emit(label, f"{e}\n\n{tb[-1500:]}")
 
     # --------------------------------------------------------------- edits
-    def _edit(self, label: str, fn: Callable[[EditorSession, threading.Event], object]) -> None:
+    def _edit(self, label: str, fn: Callable[[EditorSession, threading.Event], object], scoped: bool = False) -> None:
+        """Run a session edit as a job. ``scoped``: apply the Channels scope to the selection first."""
         s = self.session
         if s is None:
             return
@@ -308,30 +316,30 @@ class EditorController(QObject):
             if res is not None and hasattr(res, "command"):
                 self.statusMessage.emit(res.command.label, 5000)
 
-        self.run_job(label, lambda cancel: fn(s, cancel), done)
+        self.run_job(label, lambda cancel: fn(s, cancel), done, prepare=(lambda: self._ensure_scope(s)) if scoped else None)
 
     def _ensure_scope(self, s: EditorSession):
+        """GUI thread only (pass it as ``run_job(prepare=...)``): it changes the selection."""
         if s.selection is not None and s.selection.channels != self.tools.channel_scope:
             s._set_selection_raw(s.selection.with_channels(self.tools.channel_scope))
 
     def apply_gain(self, gain_db: float) -> None:
         def fn(s, cancel):
-            self._ensure_scope(s)
             s.component(cancel=lambda: cancel.is_set())
             return s.apply_gain(gain_db)
 
-        self._edit("Apply gain", fn)
+        self._edit("Apply gain", fn, scoped=True)
 
     def mute_selection(self) -> None:
-        self._edit("Mute", lambda s, c: (self._ensure_scope(s), s.component(cancel=c.is_set), s.mute_selection())[-1])
+        self._edit("Mute", lambda s, c: (s.component(cancel=c.is_set), s.mute_selection())[-1], scoped=True)
 
     def delete_spectral(self) -> None:
         self._edit("Delete spectral content",
-                   lambda s, c: (self._ensure_scope(s), s.component(cancel=c.is_set), s.delete_spectral())[-1])
+                   lambda s, c: (s.component(cancel=c.is_set), s.delete_spectral())[-1], scoped=True)
 
     def extract(self, copy: bool = False) -> None:
         self._edit("Copy to new layer" if copy else "Extract to new layer",
-                   lambda s, c: (self._ensure_scope(s), s.component(cancel=c.is_set), s.extract_to_new_layer(copy=copy))[-1])
+                   lambda s, c: (s.component(cancel=c.is_set), s.extract_to_new_layer(copy=copy))[-1], scoped=True)
 
     def brush_stroke(self, brush: BrushShape, kind: str) -> None:
         tools = self.tools
@@ -351,7 +359,6 @@ class EditorController(QObject):
 
     def preview_gain(self, gain_db: float, then_play: bool = True) -> None:
         def fn(s, cancel):
-            self._ensure_scope(s)
             s.component(cancel=cancel.is_set)
             return s.preview_gain(gain_db)
 
@@ -360,8 +367,9 @@ class EditorController(QObject):
             if then_play:
                 self.play_preview(bypass=False)
 
-        if self.session is not None:
-            self.run_job("Render preview", lambda cancel: fn(self.session, cancel), done)
+        s = self.session
+        if s is not None:
+            self.run_job("Render preview", lambda cancel: fn(s, cancel), done, prepare=lambda: self._ensure_scope(s))
 
     def commit_preview(self) -> None:
         self._edit("Apply", lambda s, c: s.commit_preview())
@@ -431,9 +439,11 @@ class EditorController(QObject):
             # keep playing, but switch to the full mix so the adjustment is heard live
             self.set_playback_source(self._mix_source, AuditionState())
 
-        def job(cancel):
+        def prepare():
             if s.current_area() is None:
                 self._ensure_scope(s)
+
+        def job(cancel):
             return fn(s)
 
         def done(res):
@@ -458,7 +468,7 @@ class EditorController(QObject):
                 self._area_queue.clear()
                 self.error.emit("Adjust area", f"{type(e).__name__}: {e}")
 
-        self.run_job(self.AREA_JOB, job, done, failed, quiet=True)
+        self.run_job(self.AREA_JOB, job, done, failed, quiet=True, prepare=prepare)
 
     def _drain_area_queue(self, s) -> None:
         """Apply changes queued while the last adjustment was rendering, as one more job."""
@@ -676,7 +686,6 @@ class EditorController(QObject):
             return
 
         def fn(cancel):
-            self._ensure_scope(s)
             if mode in ("selected", "remainder"):
                 s.component(cancel=cancel.is_set)
             return {
@@ -691,7 +700,7 @@ class EditorController(QObject):
                               total_frames=s.project.n_frames)
             self._play_region(src, AuditionState(mode, buf.label), buf.start, buf.end)
 
-        self.run_job("Render audition", fn, done)
+        self.run_job("Render audition", fn, done, prepare=lambda: self._ensure_scope(s))
 
     def play_preview(self, bypass: bool = False) -> None:
         s = self.session

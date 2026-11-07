@@ -10,6 +10,7 @@ once to prove no button is dead or crashes.
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -431,3 +432,37 @@ def test_file_with_more_channels_than_the_output_plays_folded_to_stereo(qtbot, n
     w.ctl.session.export(exp, ExportSettings(format="WAV", subtype="FLOAT"))
     assert sf.info(exp).channels == channels
     w.ctl.shutdown()
+
+
+@pytest.mark.parametrize("action", ["apply_gain", "preview", "mute", "audition", "area"])
+def test_channel_scope_is_applied_to_the_selection_on_the_gui_thread(qtbot, win, tmp_path, monkeypatch, action):
+    """When the Channels scope differs from the selection's channels, the edit narrows the
+    selection first. That happened inside the worker job, so the selection (and the UI listening
+    to it) was changed from a background thread while the GUI could be reading it."""
+    from spledio.selections.selection import Selection
+
+    w = win
+    _open(qtbot, w, _fixture(str(tmp_path / "a.wav")))
+    s = w.ctl.session
+    w.ctl.set_channel_scope((0,))
+    s.set_selection(Selection.of(RectShape(1.0, 2.0, 2300, 2700)))  # set directly (e.g. a loaded project): all channels
+    on_gui = []
+    real = s._set_selection_raw
+
+    def spy(sel):
+        on_gui.append(threading.current_thread() is threading.main_thread())
+        real(sel)
+
+    monkeypatch.setattr(s, "_set_selection_raw", spy)
+    {
+        "apply_gain": lambda: w.ctl.apply_gain(-6.0),
+        "preview": lambda: w.ctl.preview_gain(-6.0, then_play=False),
+        "mute": w.ctl.mute_selection,
+        "audition": lambda: w.ctl.audition_mode("selected"),
+        "area": lambda: w.ctl.adjust_area(-1),
+    }[action]()
+    _idle(qtbot, w)
+    assert on_gui and all(on_gui), on_gui
+    assert s.selection is None or s.selection.channels == (0,)
+    assert not w._errors
+
