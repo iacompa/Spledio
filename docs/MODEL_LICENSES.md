@@ -1,6 +1,6 @@
 # Model licenses
 
-**No AI models are bundled or downloaded.** Spledio 0.1.0 ships no model
+**No AI models are bundled or downloaded.** Spledio 1.1 ships no model
 weights, imports no machine-learning framework, and has no download code.
 `src/spledio/models/` is an empty adapter slot, and the verified `.venv`
 contains no PyTorch, ONNX Runtime, TensorFlow or similar package (see

@@ -87,7 +87,7 @@ the final `.dmg` with each release. PyInstaller output is not bit-for-bit reprod
 - Icons: macOS `src/spledio/resources/icons/app/spledio.icns`; Windows
   `src/spledio/resources/icons/app/spledio.ico`. Regenerate both with
   `.venv/bin/python scripts/build_icons.py`.
-- Set `CFBundleShortVersionString`/`CFBundleVersion` to `0.1.0` (from
+- Set `CFBundleShortVersionString`/`CFBundleVersion` to the version, e.g. `1.1` (from
   `spledio.__version__`), for example by generating a `.spec` file with
   `--osx-bundle-identifier` and adding an `info_plist` to its `BUNDLE(...)`.
   Keep the `.spec` file in the repository: it is part of the GPL
@@ -181,11 +181,11 @@ codesign --force --timestamp --options runtime --entitlements packaging/entitlem
   --sign "Developer ID Application: NAME (TEAMID)" dist/Spledio.app
 codesign --verify --deep --strict --verbose=2 dist/Spledio.app
 
-hdiutil create -volname Spledio -srcfolder dist/Spledio.app -ov -format UDZO dist/Spledio-0.1.0-arm64.dmg
-codesign --timestamp --sign "Developer ID Application: NAME (TEAMID)" dist/Spledio-0.1.0-arm64.dmg
-xcrun notarytool submit dist/Spledio-0.1.0-arm64.dmg --keychain-profile "spledio-notary" --wait
-xcrun stapler staple dist/Spledio-0.1.0-arm64.dmg
-spctl -a -vvv -t open --context context:primary-signature dist/Spledio-0.1.0-arm64.dmg
+hdiutil create -volname Spledio -srcfolder dist/Spledio.app -ov -format UDZO dist/Spledio-1.1-arm64.dmg
+codesign --timestamp --sign "Developer ID Application: NAME (TEAMID)" dist/Spledio-1.1-arm64.dmg
+xcrun notarytool submit dist/Spledio-1.1-arm64.dmg --keychain-profile "spledio-notary" --wait
+xcrun stapler staple dist/Spledio-1.1-arm64.dmg
+spctl -a -vvv -t open --context context:primary-signature dist/Spledio-1.1-arm64.dmg
 ```
 
 - `packaging/entitlements.plist` exists and is empty (`<dict/>`).

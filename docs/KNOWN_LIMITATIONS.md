@@ -1,4 +1,4 @@
-# Known limitations (v0.1.0)
+# Known limitations (v1.1)
 
 Honest list of what is missing, rough, or only partly verified. See
 [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for per-feature status.

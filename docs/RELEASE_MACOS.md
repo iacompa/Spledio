@@ -80,15 +80,17 @@ What the script does, in order:
 Then:
 
 ```bash
-git tag v0.1.0
+git tag v1.1
 ```
 
 ```bash
-git push origin v0.1.0
+git push origin v1.1
 ```
 
 ```bash
-gh release create v0.1.0 dist/Spledio-macOS-arm64.dmg dist/Spledio-macOS-arm64.dmg.sha256 --title "Spledio 0.1.0" --notes-file release-notes.md
+gh release create v1.1 --verify-tag --title "Spledio 1.1" --notes-file release-notes.md \
+  dist/Spledio-macOS-arm64.dmg dist/Spledio-macOS-arm64.dmg.sha256 \
+  dist/Spledio-1.1-source.tar.gz dist/third-party-sources/*
 ```
 
 Keep the asset name `Spledio-macOS-arm64.dmg`: the website's download button links to

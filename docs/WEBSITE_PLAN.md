@@ -60,7 +60,7 @@ the GPL requires (see below).
 - [x] **Minimum macOS: 15.0** (Sequoia). The release script reads it from the app's binaries and prints
       it; it is on the page and in the user manual. Put it in each release's notes.
 - [x] **Make the repository public** (the page and the app link to it for the source code).
-- [ ] **Publish the GitHub release** (tag `v0.1.0`) with the DMG, its `.sha256` file, `Spledio-0.1.0-source.tar.gz`,
+- [ ] **Publish the GitHub release** (tag `v1.1`) with the DMG, its `.sha256` file, `Spledio-1.1-source.tar.gz`,
       the files in `dist/third-party-sources/` and release notes. The source archives are required by the GPL/LGPL.
 - [ ] Put `website/spledio/` on the site and click every link once.
 

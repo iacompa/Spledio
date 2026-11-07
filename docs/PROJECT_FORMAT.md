@@ -42,7 +42,7 @@ without replaying DSP and without any model or cache.
 {
   "format": "spledio-project",
   "schema_version": 1,
-  "app": {"name": "Spledio", "version": "0.1.0"},
+  "app": {"name": "Spledio", "version": "1.1"},
   "saved_at": 1762460000.0,
   "portable": false,
   "project": {
