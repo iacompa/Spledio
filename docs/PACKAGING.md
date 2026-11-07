@@ -1,12 +1,14 @@
 # Packaging
 
-> For the signed + notarized Mac release, follow [RELEASE_MACOS.md](RELEASE_MACOS.md) and
-> `scripts/release_macos.sh` (written from the notes below; also not run yet).
-
-> **NOT YET TESTED.** No installer, `.app`, `.dmg`, `.exe` or AppImage has
-> been built or tested. Every step below is a plan to try, not a verified
-> recipe. PyInstaller and Briefcase are **not installed** in `.venv`
-> (verified: `No module named PyInstaller`, `No module named briefcase`).
+> **macOS: use [RELEASE_MACOS.md](RELEASE_MACOS.md) and `scripts/release_macos.sh`.** That script is the
+> working, tested recipe for the macOS PyInstaller build: an unsigned local `.app`/`.dmg` was built
+> and passed the smoke test on 2026-11-07. Signing with a Developer ID and notarization are **not done yet**.
+> The macOS notes below are the original research behind it. Where they disagree with the script,
+> the script wins.
+>
+> **Windows and Linux: NOT YET TESTED.** No `.exe`, installer or AppImage has been built.
+> Briefcase was not tried. PyInstaller is installed only in the separate build venv `.venv-build`
+> (created by the release script), not in `.venv`.
 
 ## Blockers and facts found while preparing this (2026-11-06)
 
@@ -41,7 +43,7 @@
 - **No `qmacstyle` needed.** The UI uses the built-in **Fusion** style
   (`ui/theme.py`), so the `styles/libqmacstyle` plugin is not required.
 
-## macOS: PyInstaller `.app` (recommended first attempt; NOT YET TESTED)
+## macOS: PyInstaller `.app` (works: automated in `scripts/release_macos.sh`)
 
 ### 1. Build environment
 
@@ -52,15 +54,15 @@ pins as `requirements.txt`.
 cd "/path/to/Spledio"
 /Library/Frameworks/Python.framework/Versions/3.14/bin/python3.14 -m venv .venv-build   # python.org build (not verified)
 .venv-build/bin/python -m pip install -r requirements.txt
-.venv-build/bin/python -m pip install pyinstaller pyinstaller-hooks-contrib   # pin exact versions once one works
+.venv-build/bin/python -m pip install -r requirements-packaging.txt            # exact PyInstaller pins
 .venv-build/bin/python -m pip install . --no-deps
 .venv-build/bin/python -m pip freeze > build-freeze.txt                       # keep with the release
 ```
 
-For reproducibility, move the PyInstaller pins into a `requirements-packaging.txt`,
-install with `--require-hashes`, build from a clean checkout, and record
-`build-freeze.txt` plus the SHA-256 of the final `.dmg`. PyInstaller output is
-not bit-for-bit reproducible.
+The PyInstaller pins are in `requirements-packaging.txt` (the versions of the first working
+build). For stronger reproducibility, add hashes and install with `--require-hashes`, build from a
+clean checkout, and keep `dist-build-freeze.txt` (written by the release script) plus the SHA-256 of
+the final `.dmg` with each release. PyInstaller output is not bit-for-bit reproducible.
 
 ### 2. Freeze
 
@@ -91,6 +93,13 @@ not bit-for-bit reproducible.
   "Corresponding Source" (the build scripts).
 
 ### 3. Inspect what was collected (do this every build)
+
+The release script does this automatically, then runs `--smoke-test`. What the first real build
+contained is listed in [RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07). In short, these
+predictions were right except for two things. **QtSvg** is also kept, because the SVG icon engine and image
+plugin link it. **PyInstaller bundles extra plugins** (`imageformats/libqpdf`, the virtual keyboard, TUIO
+touch), which pull in QtPdf, QtQuick/QtQml and QtNetwork; `scripts/prune_qt_bundle.py` removes them.
+The interpreter brought OpenSSL, xz, zstd and mpdecimal; `libsqlite3` was not collected.
 
 ```sh
 APP=dist/Spledio.app
@@ -139,9 +148,9 @@ from the About box:
      and CPython 3.14.7.
 4. A short **"Replacing libraries"** section:
    - Qt lives in `Contents/Frameworks/PySide6/Qt/lib/*.framework`,
-     libsndfile in `.../_soundfile_data/libsndfile_arm64.dylib`, PortAudio
-     in `.../_sounddevice_data/portaudio-binaries/libportaudio.dylib`
-     (exact paths **to verify** after the first build);
+     libsndfile in `Contents/Frameworks/_soundfile_data/libsndfile_arm64.dylib`, PortAudio
+     in `Contents/Frameworks/_sounddevice_data/portaudio-binaries/libportaudio.dylib`
+     (paths verified in the first build, 2026-11-07);
    - the replacement must be ABI-compatible (Qt 6.11.x for PySide6 6.11.3);
    - after replacing, re-sign ad hoc with
      `codesign --force --deep --sign - Spledio.app` and open the app once
@@ -156,7 +165,7 @@ from the About box:
    GPL-only Qt add-ons. Spledio uses none of them. See
    [`DEPENDENCY_INVENTORY.md`](DEPENDENCY_INVENTORY.md).
 
-### 5. Code signing and notarization (NOT YET TESTED)
+### 5. Code signing and notarization (ad-hoc signing tested; Developer ID + notarization NOT YET TESTED)
 
 Needs an Apple Developer Program membership and a **Developer ID
 Application** certificate.
@@ -178,13 +187,12 @@ xcrun stapler staple dist/Spledio-0.1.0-arm64.dmg
 spctl -a -vvv -t open --context context:primary-signature dist/Spledio-0.1.0-arm64.dmg
 ```
 
-- `packaging/entitlements.plist` does not exist yet. Create it, starting
-  with an empty `<dict/>`, when signing is first attempted.
-- Hardened runtime is required for notarization. The entitlements a frozen
-  CPython plus cffi needs are **to verify**. Start with none; add
-  `com.apple.security.cs.allow-unsigned-executable-memory` only if a crash
-  shows it is needed (cffi/libffi closures). Avoid
-  `disable-library-validation`.
+- `packaging/entitlements.plist` exists and is empty (`<dict/>`).
+- Hardened runtime is required for notarization. In the ad-hoc signed test build
+  the PortAudio/cffi output callback ran under the hardened runtime **without**
+  `allow-unsigned-executable-memory` (smoke test, 2026-11-07). Library validation had to
+  be turned off for that ad-hoc build only, because ad-hoc signatures have no Team ID.
+  A Developer ID build should need no entitlements at all. **To confirm** on the first signed build.
 - Signing all frameworks inside-out with `--deep` alone is unreliable. Sign
   nested `*.framework` bundles explicitly if `codesign --verify` complains.
 - Notarization does not stop users from replacing LGPL libraries. They

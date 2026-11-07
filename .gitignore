@@ -10,3 +10,4 @@ dist/
 /test-output/
 .venv-build/
 dist-build-freeze.txt
+/Spledio.spec

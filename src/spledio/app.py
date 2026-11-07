@@ -19,7 +19,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--font-scale", type=float, default=float(os.environ.get("SPLEDIO_FONT_SCALE", "1.0")),
                     help="scale all interface text (e.g. 1.25)")
     ap.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
+    ap.add_argument("--smoke-test", action="store_true",
+                    help="open FILE, check panels / audio libraries / an edit / export / save+reopen, print a "
+                         "report and quit (exit code 1 on any failure); used to verify packaged builds")
     args = ap.parse_args(argv)
+    if args.smoke_test and not args.file:
+        ap.error("--smoke-test needs an audio FILE")
 
     QApplication.setApplicationName(APP_NAME)
     QApplication.setOrganizationName(APP_ORG)
@@ -41,6 +46,11 @@ def main(argv: list[str] | None = None) -> int:
         pass
     win = MainWindow()
     win.show()
+    if args.smoke_test:
+        from spledio import smoke_test
+
+        smoke_test.run(app, win, args.file)  # no recovery prompt / autosave: nothing modal, nothing left behind
+        return app.exec()
     try:
         from spledio.persistence.recovery import offer_recovery, start_autosave
 

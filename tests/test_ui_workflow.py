@@ -217,3 +217,19 @@ def test_actions_disabled_without_project_explain_reason(qtbot, win):
         act = w.actions[aid]
         assert not act.isEnabled(), aid
         assert "unavailable" in act.statusTip().lower(), aid
+
+
+def test_smoke_test_mode_passes_on_a_real_window(qtbot, win, tmp_path):
+    """``spledio --smoke-test FILE`` (used to verify packaged builds) runs all its checks."""
+    from PySide6.QtWidgets import QApplication
+
+    from spledio import smoke_test
+
+    done = {}
+    smoke_test.run(QApplication.instance(), win, _fixture(str(tmp_path / "s.wav")),
+                   on_done=lambda code, results: done.update(code=code, results=results), play_silence=False)
+    qtbot.waitUntil(lambda: "code" in done, timeout=60000)
+    assert done["code"] == 0, [r for r in done["results"] if not r[1]]
+    names = [r[0] for r in done["results"]]
+    assert "all dock panels loaded" in names and "WAV export equals the playback mix" in names
+    assert len(names) == 8

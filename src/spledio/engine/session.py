@@ -753,11 +753,16 @@ class EditorSession:
         return make_patch(self.history.store, layer, a.start, new, a.channels)
 
     def adjust_area(self, direction: int = 0, big: bool = False, target_db: float | None = None,
-                    area_id: str | None = None) -> EditResult | None:
+                    area_id: str | None = None, requested_at: float | None = None) -> EditResult | None:
         """Raise/lower the level of the current area – or turn the current selection into a new area.
 
         ``direction`` +1/−1 steps the gain (see :func:`step_gain`); ``target_db`` sets it directly
-        (``-inf`` = silence). Returns None when nothing changes (already at the limit)."""
+        (``-inf`` = silence). Returns None when nothing changes (already at the limit).
+
+        ``requested_at`` is the ``time.monotonic()`` of the key press / click that asked for this
+        change (default: now). It decides whether the change merges into the previous undo step:
+        a press made while the previous change was still rendering, or within
+        :data:`MERGE_WINDOW_S` after it finished, merges – however long the rendering itself takes."""
         with self._lock:
             store = self.history.store
             a = self.area(area_id) if area_id else self.current_area()
@@ -792,7 +797,8 @@ class EditorSession:
             top = self.history.undo_stack[-1] if self.history.undo_stack else None
             merge = (isinstance(top, AreaCommand) and top.area_id == a.id and top.action == "adjust"
                      and not self.history.redo_stack and self.history._saved_marker is not top
-                     and time.monotonic() - top.touched < MERGE_WINDOW_S
+                     and (time.monotonic() if requested_at is None else requested_at) - top.touched
+                     < MERGE_WINDOW_S
                      and top.patch.start == patch.start and top.patch.length == patch.length)
             if merge:
                 merged = LayerPatch(layer.id, patch.start, top.patch.before, patch.after, patch.channels, patch.length)

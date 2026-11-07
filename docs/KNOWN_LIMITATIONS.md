@@ -64,7 +64,8 @@ Honest list of what is missing, rough, or only partly verified. See
 | macOS Intel, older macOS | Not tested |
 | Windows | Setup/run `.bat` scripts written, **not tested** |
 | Linux | Expected to work (pure Python + wheels with bundled libsndfile/PortAudio); **not tested** |
-| Packaged installers (.app/.dmg, .exe/.msi, AppImage) | **Not built yet** – see [PACKAGING.md](PACKAGING.md) |
+| macOS `.app`/`.dmg` | **Unsigned local test build works** (built and smoke-tested 2026-11-07). Not yet signed with a Developer ID, notarized, or built to run on macOS older than 26. See [RELEASE_MACOS.md](RELEASE_MACOS.md). |
+| Windows/Linux installers (.exe/.msi, AppImage) | **Not built yet**. See [PACKAGING.md](PACKAGING.md). |
 
 ## Accessibility
 

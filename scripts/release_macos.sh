@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build, sign, notarize and package Spledio for macOS (Apple Silicon).
 #
-#   NOT RUN YET. This script has been syntax-checked only. The first real run will
-#   probably need fixes; record them in docs/RELEASE_MACOS.md.
+#   UNSIGNED=1 has been run end to end (2026-11-07, see docs/RELEASE_MACOS.md).
+#   A Developer ID signing + notarization run has NOT been done yet.
 #
 # Signed + notarized release (needs a Developer ID; see docs/RELEASE_MACOS.md):
 #   SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
@@ -51,8 +51,7 @@ if [[ ! -x "$BUILD_VENV/bin/python" ]]; then
 fi
 "$BUILD_VENV/bin/python" -m pip install --upgrade pip >/dev/null
 "$BUILD_VENV/bin/python" -m pip install -r requirements.txt
-# TODO: pin the exact PyInstaller versions in requirements-packaging.txt once a build works
-"$BUILD_VENV/bin/python" -m pip install "pyinstaller>=6" pyinstaller-hooks-contrib
+"$BUILD_VENV/bin/python" -m pip install -r requirements-packaging.txt   # exact PyInstaller pins
 "$BUILD_VENV/bin/python" -m pip install . --no-deps
 "$BUILD_VENV/bin/python" -m pip freeze > dist-build-freeze.txt
 
@@ -69,6 +68,7 @@ rm -rf build dist
   --osx-bundle-identifier "$BUNDLE_ID" \
   --icon src/spledio/resources/icons/app/spledio.icns \
   --collect-data spledio \
+  --collect-submodules spledio \
   --exclude-module tkinter \
   --exclude-module pytest --exclude-module pytestqt --exclude-module pygments \
   --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtQml \
@@ -85,7 +85,16 @@ plutil -replace CFBundleVersion -string "$VERSION" "$PLIST"
 plutil -replace NSHumanReadableCopyright -string "Spledio – free software under GPL-3.0-only" "$PLIST"
 mkdir -p "$APP/Contents/Resources/licenses"
 cp LICENSE THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/licenses/"
-cp -R licenses/. "$APP/Contents/Resources/licenses/"
+# every license in licenses/ except the development-only tools (not part of the app; see THIRD_PARTY_NOTICES.md)
+for f in licenses/*; do
+  case "$(basename "$f")" in
+    pytest-*|pluggy-*|iniconfig-*|packaging-*|pygments-*|typing_extensions-*) ;;
+    *) cp "$f" "$APP/Contents/Resources/licenses/" ;;
+  esac
+done
+
+step "Remove Qt plugins/frameworks Spledio does not use (PDF, virtual keyboard, TUIO → Pdf/Quick/Qml/Network)"
+python3 scripts/prune_qt_bundle.py "$APP"
 
 step "Check what was bundled"
 if find "$APP" \( -name "libav*" -o -name "libsw*" -o -name "QtWebEngine*" -o -name "QtPdf*" -o -name "QtMultimedia*" \) | grep -q .; then
@@ -95,10 +104,24 @@ for lib in libsndfile libportaudio; do
   find "$APP" -name "${lib}*" | grep -q . || die "$lib missing from the bundle"
 done
 "$APP/Contents/MacOS/$APP_NAME" --version
+SMOKE_WAV="$(mktemp -d)/smoke.wav"
+"$BUILD_VENV/bin/python" scripts/make_fixture.py "$SMOKE_WAV" >/dev/null
+"$APP/Contents/MacOS/$APP_NAME" --smoke-test "$SMOKE_WAV" || die "smoke test failed (unsigned bundle)"
 
 step "Sign inside-out (hardened runtime, secure timestamp)"
 TS=(--timestamp)
-[[ "$UNSIGNED" == "1" ]] && TS=()
+ENTITLEMENTS=packaging/entitlements.plist
+if [[ "$UNSIGNED" == "1" ]]; then
+  TS=()
+  # Ad-hoc signatures carry no Team ID, so the hardened runtime's library validation refuses
+  # every bundled library ("mapping process and mapped file have different Team IDs").
+  # Only for this local test build: keep the hardened runtime (so its memory protections are
+  # still exercised by the smoke test) but turn library validation off. A Developer ID build
+  # signs every file with the same Team ID and uses packaging/entitlements.plist unchanged.
+  ENTITLEMENTS="$(mktemp -d)/entitlements-adhoc.plist"
+  cp packaging/entitlements.plist "$ENTITLEMENTS"
+  /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$ENTITLEMENTS"
+fi
 # 1) every Mach-O file that is not a framework's main binary
 while IFS= read -r -d '' f; do
   if file -b "$f" | grep -q "Mach-O"; then
@@ -110,9 +133,10 @@ while IFS= read -r fw; do
   codesign --force ${TS[@]+"${TS[@]}"} --options runtime --sign "$SIGN" "$fw"
 done < <(find "$APP/Contents" -name "*.framework" -type d | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
 # 3) the app itself, with entitlements
-codesign --force ${TS[@]+"${TS[@]}"} --options runtime --entitlements packaging/entitlements.plist --sign "$SIGN" "$APP"
+codesign --force ${TS[@]+"${TS[@]}"} --options runtime --entitlements "$ENTITLEMENTS" --sign "$SIGN" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
-"$APP/Contents/MacOS/$APP_NAME" --version   # still starts after signing
+codesign -d --entitlements - "$APP"
+"$APP/Contents/MacOS/$APP_NAME" --smoke-test "$SMOKE_WAV" || die "smoke test failed after signing (hardened runtime / entitlements?)"
 
 step "Disk image"
 STAGE="$(mktemp -d)"

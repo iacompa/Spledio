@@ -1,8 +1,11 @@
 # Releasing Spledio for macOS: signed, notarized, downloadable
 
-> **Status: plan + script, NOT RUN YET.** No `.app` or `.dmg` has been built, signed or notarized.
-> `scripts/release_macos.sh` has passed `bash -n` (with macOS's bash 3.2) and `shellcheck` only.
-> Expect fixes on the first real run, and record them here.
+> **Status (2026-11-07):** the **unsigned local test build works**. `UNSIGNED=1 scripts/release_macos.sh`
+> ran end to end on this Mac and produced a `.app` and `.dmg` that pass the built-in smoke test. See
+> [First local build](#first-local-build-2026-11-07) below.
+> **Not done yet:** a Developer ID signature, notarization, stapling, a build that runs on macOS older
+> than 26, and a test on a second Mac. None of these can be done without the Apple membership and a
+> python.org Python (steps 1–5 below).
 
 Why this matters: macOS Gatekeeper blocks apps downloaded from the internet unless they are **signed with a
 Developer ID** and **notarized by Apple**. With both, users double-click and the app opens normally.
@@ -50,14 +53,17 @@ What the script does, in order:
 3. Freezes `Spledio.app` with PyInstaller in **onedir** mode. Never use onefile: Qt and libsndfile must
    stay replaceable files under the LGPL.
 4. Sets the version in `Info.plist` and copies `LICENSE`, `THIRD_PARTY_NOTICES.md` and `licenses/` into the bundle.
-5. Checks the bundle: no FFmpeg, WebEngine, Pdf or Multimedia; libsndfile and PortAudio present; `--version` runs.
-6. Signs everything inside-out with the hardened runtime and a secure timestamp (`packaging/entitlements.plist`),
-   then verifies with `codesign --verify --deep --strict`.
-7. Builds `dist/Spledio-macOS-arm64.dmg` (app + Applications shortcut) and signs it.
-8. Submits it to Apple's notary service and waits. If Apple rejects it, the script downloads the log to
+5. Removes Qt plugins Spledio never uses, then every Qt framework nothing links to any more
+   (`scripts/prune_qt_bundle.py`; see below).
+6. Checks the bundle: no FFmpeg, WebEngine, Pdf or Multimedia; libsndfile and PortAudio present; `--version` runs;
+   then runs **`Spledio --smoke-test`** on a generated test file (see below). Any failure stops the script.
+7. Signs everything inside-out with the hardened runtime and a secure timestamp (`packaging/entitlements.plist`),
+   verifies with `codesign --verify --deep --strict`, and runs the smoke test **again on the signed app**.
+8. Builds `dist/Spledio-macOS-arm64.dmg` (app + Applications shortcut) and signs it.
+9. Submits it to Apple's notary service and waits. If Apple rejects it, the script downloads the log to
    `dist/notarization-log.json` and stops.
-9. Staples the ticket, validates it, and asks Gatekeeper (`spctl`) to assess the DMG.
-10. Writes `dist/Spledio-macOS-arm64.dmg.sha256`.
+10. Staples the ticket, validates it, and asks Gatekeeper (`spctl`) to assess the DMG.
+11. Writes `dist/Spledio-macOS-arm64.dmg.sha256`.
 
 Then:
 
@@ -98,6 +104,63 @@ UNSIGNED=1 scripts/release_macos.sh
 This produces an ad-hoc signed DMG for checking the packaging on your own Mac. It is **not notarized**:
 other Macs will block it, so never publish it.
 
+Ad-hoc signatures have no Team ID, so with the hardened runtime macOS refuses to load the app's own
+libraries ("mapping process and mapped file (non-platform) have different Team IDs"). For this test build
+only, the script adds `com.apple.security.cs.disable-library-validation` to a temporary copy of the
+entitlements. The hardened runtime's other protections stay on, so the smoke test still shows whether the
+audio callback works under them. A Developer ID build signs every file with one Team ID and uses
+`packaging/entitlements.plist` unchanged (empty).
+
+## The smoke test (`--smoke-test`)
+
+```bash
+dist/Spledio.app/Contents/MacOS/Spledio --smoke-test some-audio.wav
+```
+
+It runs inside the real app window, prints one PASS/FAIL line per check and exits with 0 (all passed)
+or 1. Use it on any build, including a downloaded one. It checks:
+
+* every dock panel loaded (no "panel failed to load");
+* the app icon loads;
+* PortAudio loads and lists output devices;
+* **the app's real output stream runs, playing silence**: this exercises the PortAudio → cffi
+  audio callback, the part most likely to break under the hardened runtime;
+* the file opens and the spectrogram renders;
+* an adjusted area at −6 dB changes the audio there and leaves the audio before it bit-identical;
+* WAV export is identical to the playback mix;
+* save + reopen of a project gives the identical mix.
+
+It does not play audible sound and leaves no files behind.
+
+## First local build (2026-11-07)
+
+Command: `UNSIGNED=1 SKIP_TESTS=1 PYTHON=/opt/homebrew/bin/python3.14 scripts/release_macos.sh` on an
+Apple Silicon Mac with macOS 27.0.1, PyInstaller 6.22.3 with pyinstaller-hooks-contrib 2026.9. The same run without `SKIP_TESTS` is recorded in
+[TESTING.md](TESTING.md).
+
+**Fixes the first runs needed (all now in the scripts):**
+
+| Problem | Fix |
+|---|---|
+| The bundle check failed: `QtPdf` was bundled. PyInstaller collects every image-format and input-method plugin; `imageformats/libqpdf` pulls in QtPdf, and the virtual-keyboard plugin pulls in QtVirtualKeyboard, QtQuick, QtQml and more. `generic/libqtuiotouchplugin` (TUIO touch input over UDP) pulls in QtNetwork. | `scripts/prune_qt_bundle.py` removes those plugins and the image formats Spledio never reads (JPEG, TIFF, WebP, GIF, …), then removes every Qt framework that no remaining binary links to (checked with `otool -L`). |
+| The signed app would not start: "different Team IDs" (ad-hoc + hardened runtime). | Library validation is turned off for `UNSIGNED=1` builds only (see above). |
+| Dock panels are imported by name at run time, so PyInstaller might miss them. | `--collect-submodules spledio`. The smoke test confirms that all 7 panels load. |
+| `plutil -insert` treats dots in an entitlement key as a key path. | `PlistBuddy` is used instead. |
+
+**Result:**
+
+| | |
+|---|---|
+| `dist/Spledio.app` | 126 MB. Qt frameworks: QtCore, QtGui, QtWidgets, QtDBus, QtSvg (before pruning there were also QtPdf, QtVirtualKeyboard(+Qml), QtQuick, QtQml(+Meta, Models, WorkerScript), QtOpenGL and QtNetwork). Qt plugins: `platforms/libqcocoa` (+ minimal, offscreen), `styles/libqmacstyle`, `imageformats/libqsvg`, `iconengines/libqsvgicon`. |
+| Other native libraries | `libsndfile_arm64`, `libportaudio`, scipy's `libgfortran.5`, `libgcc_s.1.1` and `libquadmath.0`, `libpyside6`/`libshiboken6`, and from the Homebrew interpreter: OpenSSL 3.6.4 (`libssl.3`, `libcrypto.3`), xz 5.8.4 (`liblzma.5`), zstd 1.5.7 (`libzstd.1`), mpdecimal 4.0.1 (`libmpdec.4`). No FFmpeg, WebEngine, Pdf or Multimedia. |
+| `dist/Spledio-macOS-arm64.dmg` | 57 MB, `hdiutil verify` valid, checksum file matches. |
+| Smoke test, unsigned app | **PASSED** (all checks) |
+| Smoke test, ad-hoc signed app (hardened runtime on) | **PASSED**: output stream ran on "MacBook Pro Speakers", 18.3 ms latency. So the cffi audio callback works under the hardened runtime **without** `allow-unsigned-executable-memory`. |
+| Launched through `open` (like a Finder double-click) | smoke test **PASSED**; a normal launch opened the main window with the file and its spectrogram |
+| App copied out of the mounted DMG | `codesign --verify --deep --strict` valid; smoke test **PASSED** |
+| Gatekeeper (`spctl -a -t exec`) | **rejected**, as expected for an ad-hoc signed app. Only a notarized build passes. |
+| Minimum macOS of this build | **26.0**, because the bundled Homebrew `Python.framework` has `minos 26.0` (the launcher itself says 11.0). A release must be built with a python.org Python (step 5 of the setup). |
+
 ## Troubleshooting
 
 | Symptom | Likely fix |
@@ -106,6 +169,8 @@ other Macs will block it, so never publish it.
 | Notarization "Invalid": *not signed with a valid Developer ID* / *no secure timestamp* | A nested binary was missed. Check the log for its path, and make sure it is signed in step 6 (frameworks are signed after their contents). |
 | Notarization "Invalid": *hardened runtime not enabled* | The binary was signed without `--options runtime`. Same as above. |
 | App opens on the build Mac but not elsewhere | It was built with the Homebrew Python (macOS 26+ only). Use a python.org Python. |
+| `Failed to load Python shared library … different Team IDs` | Ad-hoc signature + hardened runtime. Expected only with `UNSIGNED=1`, where the script already handles it. With a Developer ID it means some file was not re-signed; check that step 7 signed every Mach-O file. |
+| A smoke-test line says `FAIL` | The message names the check. "panels failed to load" means a module was not bundled (check `--collect-submodules spledio`). An output-stream failure after signing means the audio callback is blocked by the hardened runtime: add `allow-unsigned-executable-memory` (see `packaging/entitlements.plist`). |
 | "Spledio is damaged and can't be opened" | The DMG or app was modified after signing, or stapling failed. Rebuild. Do not edit files inside the signed app. |
 
 ## Licensing notes for distribution

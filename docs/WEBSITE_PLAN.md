@@ -47,8 +47,12 @@ the GPL requires (see below).
       visitors. A public repository is also the simplest way to meet the GPL source requirement.
 - [ ] **Apple Developer Program** membership (paid yearly by Apple) and a **Developer ID Application**
       certificate. Without them macOS blocks the downloaded app. See [RELEASE_MACOS.md](RELEASE_MACOS.md).
-- [ ] **First signed and notarized build**, made with `scripts/release_macos.sh`. No `.app` or `.dmg` has
-      been built yet; packaging is the next engineering task.
+- [x] **First unsigned local build** with `scripts/release_macos.sh`: `.app` and `.dmg` built and passed the
+      smoke test (2026-11-07; see [RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07)).
+- [ ] **Build with a python.org Python.** The Homebrew Python on the development Mac limits the app to
+      macOS 26 or later.
+- [ ] **Add the missing license texts** to the bundle (list in `THIRD_PARTY_NOTICES.md`, "Gaps to close").
+- [ ] **First signed and notarized build**, made with `scripts/release_macos.sh`.
 - [ ] **Test the DMG on a clean Mac** (or a new user account): download from the release URL, open, edit,
       play, export, save and reopen.
 - [ ] **Fill in the minimum macOS version** in the release notes. It depends on the Python used to build

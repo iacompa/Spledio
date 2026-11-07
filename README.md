@@ -117,7 +117,7 @@ Real-device playback test (opt-in): `SPLEDIO_AUDIO_TEST=1 .venv/bin/python -m py
 | [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) | what is missing or rough |
 | [docs/CONTINUATION.md](docs/CONTINUATION.md) | where to pick up development |
 | [docs/PACKAGING.md](docs/PACKAGING.md) | building installers |
-| [docs/RELEASE_MACOS.md](docs/RELEASE_MACOS.md) | signing + notarizing the Mac download (`scripts/release_macos.sh`, not run yet) |
+| [docs/RELEASE_MACOS.md](docs/RELEASE_MACOS.md) | building, signing + notarizing the Mac download (`scripts/release_macos.sh`; unsigned local build tested, notarized release not done yet) |
 | [docs/WEBSITE_PLAN.md](docs/WEBSITE_PLAN.md), [website/spledio/](website/spledio/index.html) | the app page for the website and the pre-launch checklist |
 | [docs/PRIVACY_AND_STORAGE.md](docs/PRIVACY_AND_STORAGE.md) | what is stored where |
 | [docs/DEPENDENCY_INVENTORY.md](docs/DEPENDENCY_INVENTORY.md), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | licences |

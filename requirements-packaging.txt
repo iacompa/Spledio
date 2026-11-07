@@ -1,0 +1,10 @@
+# Build-time tools for the macOS .app/.dmg (scripts/release_macos.sh), installed only into .venv-build.
+# These exact versions produced the working, smoke-tested build of 2026-11-07 (see docs/RELEASE_MACOS.md).
+# Not shipped inside the app; PyInstaller's bootloader is GPL-2.0-or-later with an exception that allows
+# bundling any program.
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.9
+altgraph==0.17.5
+macholib==1.16.4
+packaging==26.3
+setuptools==84.2.1

@@ -132,6 +132,23 @@ def test_rapid_presses_merge_into_one_undo_step_and_undo_is_exact(s):
     assert np.array_equal(s.project.layers[0].audio, after) and s.areas[0].gain_db == -4
 
 
+def test_merge_counts_from_the_press_not_from_when_rendering_finished(s):
+    """A slow render (long file, busy Mac) must not split quick presses into separate undo steps."""
+    s.set_selection(sel(2300, 2700))
+    s.adjust_area(-1)
+    top = s.history.undo_stack[-1]
+    # pressed 0.5 s before the previous change finished rendering; this change finishes 3 s later
+    top.touched = time.monotonic() - 3.0
+    s.adjust_area(-1, requested_at=top.touched - 0.5)
+    assert len(s.history.undo_stack) == 1 and s.current_area().gain_db == -2
+    # a press 5 s after the last change finished is a new step, even if its rendering is instant
+    s.history.undo_stack[-1].touched = time.monotonic() - 5.0
+    s.adjust_area(-1, requested_at=time.monotonic())
+    assert len(s.history.undo_stack) == 2 and s.current_area().gain_db == -3
+    s.undo()
+    assert s.current_area().gain_db == -2
+
+
 def test_presses_after_a_pause_are_separate_steps(s, monkeypatch):
     s.set_selection(sel(2300, 2700))
     s.adjust_area(-1)

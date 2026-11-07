@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 import os
 import threading
+import time
 import traceback
 import warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -89,7 +90,8 @@ class EditorController(QObject):
         self.preroll_s = 0.5
         self.postroll_s = 0.5
         self.monitor_volume = 1.0
-        self._area_queue: list[tuple[int, bool]] = []
+        # (area id or None, "step"|"target", value, big, time.monotonic() of the press)
+        self._area_queue: list[tuple[str | None, str, float, bool, float]] = []
         self._mix_source: ArraySource | None = None
 
         from spledio.playback.engine import PlaybackEngine
@@ -410,16 +412,17 @@ class EditorController(QObject):
         s = self.session
         if s is None or (target_db is None and not direction):
             return
+        now = time.monotonic()  # when the user asked (rendering may take a while on long files)
         if self._busy:
             if self.job_label == self.AREA_JOB:
                 if target_db is not None:
-                    self._area_queue.append((area_id, "target", float(target_db), False))
+                    self._area_queue.append((area_id, "target", float(target_db), False, now))
                 else:
-                    self._area_queue.append((area_id, "step", int(direction), bool(big)))
+                    self._area_queue.append((area_id, "step", int(direction), bool(big), now))
             else:
                 self.statusMessage.emit("Busy: wait for the current operation or press Esc to cancel it", 3000)
             return
-        self._run_area_job(lambda sess: sess.adjust_area(direction, big, target_db, area_id))
+        self._run_area_job(lambda sess: sess.adjust_area(direction, big, target_db, area_id, requested_at=now))
 
     def _run_area_job(self, fn) -> None:
         s = self.session
@@ -466,19 +469,21 @@ class EditorController(QObject):
         a = s.current_area()
         g0 = a.gain_db if a is not None else 0.0  # no area yet: the selection is at 0 dB
         g = g0
-        others: dict[str, float] = {}
-        for aid, kind, val, big in q:
+        others: dict[str, tuple[float, float]] = {}
+        t = None  # earliest press folded into this job: it was made while the last change rendered
+        for aid, kind, val, big, pressed in q:
             if aid is None or (a is not None and aid == a.id):
                 g = step_gain(g, val, big) if kind == "step" else val
+                t = pressed if t is None else min(t, pressed)
             elif kind == "target" and s.area(aid) is not None:
-                others[aid] = val
+                others[aid] = (val, min(pressed, others[aid][1]) if aid in others else pressed)
         cur = a.id if a is not None else None  # None: make a new area from the selection
-        jobs = ([(cur, g)] if g != g0 else []) + list(others.items())
+        jobs = ([(cur, (g, t))] if g != g0 else []) + list(others.items())
         if not jobs:
             return
-        (aid, g), rest = jobs[0], jobs[1:]
-        self._area_queue = [(k, "target", v, False) for k, v in rest]
-        self._run_area_job(lambda sess, aid=aid, g=g: sess.adjust_area(target_db=g, area_id=aid))
+        (aid, (g, t)), rest = jobs[0], jobs[1:]
+        self._area_queue = [(k, "target", v, False, p) for k, (v, p) in rest]
+        self._run_area_job(lambda sess, aid=aid, g=g, t=t: sess.adjust_area(target_db=g, area_id=aid, requested_at=t))
 
     def set_area_gain(self, area_id: str, gain_db: float) -> None:
         self.adjust_area(target_db=gain_db, area_id=area_id)

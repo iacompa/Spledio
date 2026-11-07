@@ -147,7 +147,7 @@ verified interpreter is **Homebrew CPython 3.14.7**
 | Component | License | Copyright as shipped | File |
 |---|---|---|---|
 | CPython 3.14.7 | PSF-2.0 (Python Software Foundation License; see file for history and CNRI/CWI terms) | `Copyright (c) 2001 Python Software Foundation; All Rights Reserved` | [`licenses/CPython-3.14-LICENSE.txt`](licenses/CPython-3.14-LICENSE.txt) (from `.../lib/python3.14/LICENSE.txt`) |
-| Homebrew libraries a bundler may collect: OpenSSL 3.6.4 `libcrypto` (pulled in by `_hashlib`; Spledio imports `hashlib`), `liblzma` (xz), `libmpdec`, `libsqlite3` | **not verified locally** | not verified | not collected |
+| Homebrew libraries PyInstaller **did** collect in the first build (2026-11-07): OpenSSL 3.6.4 (`libssl.3`, `libcrypto.3`), xz 5.8.4 (`liblzma.5`), zstd 1.5.7 (`libzstd.1`), mpdecimal 4.0.1 (`libmpdec.4`). `libsqlite3` was not collected. | Expected: Apache-2.0 (OpenSSL 3), 0BSD (xz's liblzma), BSD-3-Clause (zstd, which also offers GPL-2.0), BSD-2-Clause (mpdecimal). **Not verified** against the shipped files. | not verified | **missing**: see gap 5 |
 
 ## Development-only dependencies (not redistributed)
 
@@ -172,10 +172,11 @@ not listed or redistributed.
 ## Gaps to close before distributing a bundled app
 
 1. LGPL-3.0 text for Qt/PySide6/shiboken6 (not shipped in the wheels or anywhere on this machine).
-2. Third-party notices for code inside Qt (libpng, FreeType, HarfBuzz, md4c, PCRE2, and libjpeg-turbo/libtiff/libwebp if those imageformats plugins ship). Sources: [Licenses Used in Qt](https://doc.qt.io/qt-6/licenses-used-in-qt.html) and the Qt SBOM.
+2. Third-party notices for code inside the Qt parts that ship (QtCore, QtGui, QtWidgets, QtDBus, QtSvg and the cocoa, svg and macstyle plugins: libpng, FreeType, HarfBuzz, md4c, PCRE2, …). The JPEG, TIFF and WebP plugins are removed from the bundle (`scripts/prune_qt_bundle.py`), so libjpeg-turbo, libtiff and libwebp notices are not needed. Sources: [Licenses Used in Qt](https://doc.qt.io/qt-6/licenses-used-in-qt.html) and the Qt SBOM.
 3. Upstream license files for libFLAC, libogg, libvorbis, libopus, mpg123 and LAME (LAME needs the LGPL-2.0 text).
 4. The full PortAudio license text.
-5. Notices for the Homebrew libraries the frozen interpreter pulls in (OpenSSL etc.), or build from an interpreter whose bundled-library notices are known.
+5. Notices for the libraries the frozen interpreter pulls in. The Homebrew interpreter brought OpenSSL, xz, zstd and mpdecimal. A release should be built with the python.org Python anyway (minimum macOS), so collect the notices for **that** interpreter's libraries after the first python.org build.
+6. The app's `Contents/Resources/licenses/` folder gets `LICENSE`, this file and every file in `licenses/` except the development-only tools (`scripts/release_macos.sh`). The texts in gaps 1–5 must be added to `licenses/` before a public release.
 
 ## License file sources and checksums
 
