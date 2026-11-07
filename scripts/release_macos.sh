@@ -98,8 +98,9 @@ rm -rf build dist
   --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtQml \
   --exclude-module PySide6.QtQuick --exclude-module PySide6.QtMultimedia \
   --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtPdf \
+  --exclude-module cffi._shimmed_dist_utils \
   --exclude-module setuptools --exclude-module pkg_resources --exclude-module _distutils_hack \
-  --exclude-module distutils --exclude-module packaging \
+  --exclude-module packaging \
   src/spledio/__main__.py
 APP="dist/$APP_NAME.app"
 [[ -d "$APP" ]] || die "PyInstaller did not produce $APP"
@@ -129,9 +130,11 @@ fi
 for lib in libsndfile libportaudio; do
   find "$APP" -name "${lib}*" | grep -q . || die "$lib missing from the bundle"
 done
-# Build and test tools must stay out of the app: their licenses are not shipped with it. (cffi
-# mentions setuptools only for compiling C extensions, which the app never does: soundfile and
-# sounddevice load their libraries with ffi.dlopen.)
+# Build and test tools must stay out of the app: their licenses are not shipped with it. (cffi's
+# cffi._shimmed_dist_utils, excluded above, is the only thing that pulls in setuptools/distutils;
+# cffi imports it only inside its C-compiling functions, which the app never calls: soundfile and
+# sounddevice load their libraries with ffi.dlopen. Do not exclude "distutils" itself: PyInstaller's
+# distutils hook then fails with 'Target module "distutils" already imported as ExcludedModule'.)
 if grep -E -q "^ *\('(setuptools|pkg_resources|_distutils_hack|distutils|packaging|pytest|pytestqt|pygments)[.']" \
      "build/$APP_NAME/PYZ-00.toc" || [[ -e "$APP/Contents/Resources/setuptools" ]]; then
   die "build tools (setuptools/packaging/pytest/pygments) were bundled – add them to the --exclude-module list"
