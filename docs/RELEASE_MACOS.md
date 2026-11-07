@@ -26,12 +26,12 @@ Developer ID** and **notarized by Apple**. With both, users double-click and the
    ```bash
    xcrun notarytool store-credentials spledio-notary --apple-id "you@example.com" --team-id TEAMID
    ```
-   It asks for the app-specific password. The script refers to these credentials as `spledio-notary` and never
-   sees the password.
-4. **Decide the bundle identifier before the first release.** Today it is `org.spledio.Spledio`
-   (`APP_ID` in `src/spledio/branding.py`). If you own a domain, use its reverse form, for example
-   `com.yourdomain.spledio`. Changing it after release makes macOS treat it as a different app.
-   Pass `BUNDLE_ID=...` to the script and update `branding.py` to match.
+   It asks for the app-specific password. The script uses the profile named in `NOTARY_PROFILE`
+   (default `spledio-notary`) and never sees the password. Credentials belong to the team, not to one app:
+   a profile already stored for another app of the same team works too (pass its name in `NOTARY_PROFILE`).
+4. **Bundle identifier: `com.iacompa.spledio`** (`APP_ID` in `src/spledio/branding.py`, and the
+   script's default `BUNDLE_ID`), in line with the owner's other apps (`com.iacompa.<app>`). Decided before
+   the first release (2026-11-07). Never change it after a release: macOS would treat it as a different app.
 5. **Nothing to install for Python.** Users never install Python: it is packed inside the app. The build
    uses the official python.org CPython, which `scripts/get_build_python.sh` downloads (pinned version,
    SHA-256 and the Python Software Foundation's Apple signature checked) and only *unpacks* into

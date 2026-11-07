@@ -70,7 +70,7 @@ the final `.dmg` with each release. PyInstaller output is not bit-for-bit reprod
 ```sh
 .venv-build/bin/pyinstaller --noconfirm --clean --windowed \
   --name Spledio \
-  --osx-bundle-identifier org.spledio.Spledio \
+  --osx-bundle-identifier com.iacompa.spledio \
   --icon src/spledio/resources/icons/app/spledio.icns \
   --collect-data spledio \
   --exclude-module tkinter \
@@ -239,4 +239,4 @@ PySide6 6.11 work together is **not verified**.
   **untested**.
 - Desktop entry: `Name=Spledio`, `Exec=spledio %f`, `Icon=spledio` (PNG
   sizes from `src/spledio/resources/icons/app/png/`), and
-  `StartupWMClass` matching `QApplication.setDesktopFileName("org.spledio.Spledio")`.
+  `StartupWMClass` matching `QApplication.setDesktopFileName("com.iacompa.spledio")`.

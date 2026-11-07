@@ -24,7 +24,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 APP_NAME="Spledio"
-BUNDLE_ID="${BUNDLE_ID:-org.spledio.Spledio}"   # keep in sync with src/spledio/branding.py (APP_ID)
+BUNDLE_ID="${BUNDLE_ID:-com.iacompa.spledio}"   # keep in sync with src/spledio/branding.py (APP_ID)
 PYTHON="${PYTHON:-python3}"                     # a python.org CPython is recommended (see PACKAGING.md)
 BUILD_VENV="${BUILD_VENV:-$ROOT/.venv-build}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-spledio-notary}"
