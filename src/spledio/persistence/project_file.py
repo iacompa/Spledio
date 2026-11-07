@@ -12,8 +12,8 @@ A project file is a ZIP container (entries STORED, not compressed) holding:
   absolute path plus SHA-256.
 
 Loading never unpickles (``allow_pickle=False``), never extracts member names
-to disk, rejects unexpected/oversized members, validates every manifest field
-and verifies asset checksums.
+to disk, rejects unexpected, oversized or compressed members, validates every
+manifest field and verifies asset checksums.
 """
 
 from __future__ import annotations
@@ -313,6 +313,11 @@ def _manifest_from(zf: zipfile.ZipFile) -> dict:
     for n in names:
         if not _MEMBER_RE.match(n):
             raise ProjectFormatError(f"Unexpected entry in project archive: {n!r}")
+    for info in zf.infolist():
+        # Spledio stores every member uncompressed; a compressed one could inflate far beyond the
+        # archive's size when an embedded source is extracted (nothing is unpacked before this check)
+        if info.compress_type != zipfile.ZIP_STORED:
+            raise ProjectFormatError(f"Unexpected compressed entry in project archive: {info.filename!r}")
     if "manifest.json" not in names:
         raise ProjectFormatError("manifest.json missing")
     info = zf.getinfo("manifest.json")

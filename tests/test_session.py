@@ -482,6 +482,69 @@ def test_malicious_archives_rejected(tmp_path, session):
         EditorSession.open_project(newer)
 
 
+
+def test_compressed_archive_members_are_refused_before_extraction(tmp_path):
+    """Spledio writes every member uncompressed. A deflated member (e.g. a small "embedded source"
+    that inflates to gigabytes) was extracted to disk in full before anything was checked."""
+    import json
+
+    src = make_wav(str(tmp_path / "a.wav"), dur=1.0)
+    s = EditorSession.from_audio_file(src)
+    s.set_selection(Selection.of(RectShape(0.2, 0.8, 2300, 2700)))
+    s.apply_gain(-6.0)
+    proj = str(tmp_path / "p.spledio")
+    s.save(proj, portable=True)
+    s.close()
+    bomb = str(tmp_path / "bomb.spledio")
+    with zipfile.ZipFile(proj) as zin, zipfile.ZipFile(bomb, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.startswith("assets/"):
+                zout.writestr(item.filename, b"\0" * (64 * 2**20), compress_type=zipfile.ZIP_DEFLATED)
+            else:
+                zout.writestr(item, data)
+    assert os.path.getsize(bomb) < 2 * 2**20
+    import tempfile
+
+    before = set(os.listdir(tempfile.gettempdir()))
+    with pytest.raises(ProjectFormatError, match="compressed"):
+        EditorSession.open_project(bomb)
+    with pytest.raises(ProjectFormatError, match="compressed"):
+        read_manifest(bomb)
+    leftovers = set(os.listdir(tempfile.gettempdir())) - before
+    assert not [d for d in leftovers if d.startswith("spledio-assets-")]
+    m = json.loads(zipfile.ZipFile(proj).read("manifest.json"))
+    assert m["portable"] is True
+
+
+@pytest.mark.parametrize("shape", [
+    {"kind": "polygon", "points": []},
+    {"kind": "polygon", "points": [[0.1, 100.0], [0.2, 200.0]]},
+    {"kind": "brush", "path": [], "rt": 0.02, "rf": 50.0, "hardness": 0.5},
+    {"kind": "brush", "path": [[0.1, 100.0], [0.2, 200.0]], "rt": 0.0, "rf": 50.0, "hardness": 0.5},
+    {"kind": "ellipse", "tc": 0.5, "fc": 1000.0, "rt": -0.1, "rf": 100.0},
+    {"kind": "rect", "t0": 0.1, "t1": 0.2, "f0": 100.0, "f1": "inf-ish"},
+], ids=["empty-polygon", "two-point-polygon", "empty-brush", "zero-brush", "negative-ellipse", "bad-number"])
+def test_degenerate_selection_shapes_in_a_project_are_refused(session, tmp_path, shape):
+    """A selection the editor cannot draw (an empty or two-point polygon, a brush of radius 0, ...)
+    loaded from a damaged or hand-made project made every redraw of the spectrogram fail."""
+    import json
+
+    proj = str(tmp_path / "ok.spledio")
+    session.save(proj)
+    bad = str(tmp_path / "bad.spledio")
+    with zipfile.ZipFile(proj) as zin, zipfile.ZipFile(bad, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "manifest.json":
+                m = json.loads(data)
+                m["selection"] = {"ops": [{"mode": "replace", "shape": shape}]}
+                data = json.dumps(m).encode()
+            zout.writestr(item, data)
+    with pytest.raises(ProjectFormatError):
+        EditorSession.open_project(bad)
+
+
 def test_save_is_atomic_on_failure(session, tmp_path, monkeypatch):
     proj = str(tmp_path / "p.spledio")
     session.save(proj)

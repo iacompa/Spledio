@@ -126,10 +126,15 @@ influence audio.
 * Save writes to `.spledio-*.partial` in the destination folder, fsyncs, then
   atomically renames over the target. A failed save leaves the previous file intact.
 * Load rejects: non-ZIP data, unknown entry names (path traversal such as
-  `../x` is impossible to accept), manifests > 32 MiB, newer schema versions
+  `../x` is impossible to accept), compressed entries (Spledio stores every entry
+  uncompressed, so nothing can inflate beyond the archive's own size when an
+  embedded source is extracted), manifests > 32 MiB, newer schema versions
   (clear "saved by a newer version" message), malformed JSON or wrong field
   types, out-of-range dimensions, mismatched array shapes/dtypes, non-finite
-  samples, and assets whose SHA-256 differs (unless the user explicitly accepts).
+  samples, selection shapes the editor cannot draw (non-finite coordinates, a
+  polygon with fewer than 3 points, an empty brush stroke or a brush of radius 0,
+  a negative ellipse radius), and assets whose SHA-256 differs (unless the user
+  explicitly accepts).
 * Missing linked media raises a relink request; the UI asks the user to locate
   each file, then verifies it by checksum and dimensions.
 * Embedded assets are extracted to a private temporary folder (never using
