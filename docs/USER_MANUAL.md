@@ -183,6 +183,8 @@ Other tools, all undoable:
   original or a new sample rate. What you export is exactly what you heard.
   * If boosting made the sound too loud for 16/24-bit, you choose what happens: stop, lower the
     level, limit, or clip. 32-bit float never clips.
+  * 16/24-bit exports get TPDF dither when samples must be rounded. When nothing needs rounding,
+    such as an unedited 16-bit file saved as 16 or 24-bit, the samples are written unchanged.
   * Spledio never overwrites your original audio file.
 * **Autosave:** while you have unsaved changes, Spledio saves a recovery copy every 2 minutes.
   After a crash it offers to restore your work.

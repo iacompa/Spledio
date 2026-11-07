@@ -153,15 +153,36 @@ def test_integer_round_trip_without_dither_is_exact(tmp_path, fmt, subtype):
     assert res.saturated_samples == 0  # max code (32767/32768) is representable
 
 
-def test_integer_export_with_tpdf_is_dithered_within_one_lsb(tmp_path):
+def test_integer_export_with_tpdf_is_dithered_within_one_and_a_half_lsb(tmp_path):
     src = make_fixture(tmp_path, "src.wav", subtype="PCM_24", frames=20_000)
     data, _ = load_audio(src)
+    data = data * 0.7  # an edited level: needs rounding to 24 bits
     res = export_audio(data, SR, tmp_path / "d.wav", ExportSettings(subtype="PCM_24", dither="tpdf", seed=1))
     back, _ = load_audio(tmp_path / "d.wav")
     diff = (back.astype(np.float64) - data) / LSB24
     assert res.dithered is True
     assert np.any(diff != 0)
-    assert np.all(np.abs(diff) <= 1)
+    assert np.all(np.abs(diff) <= 1.5)  # rounding (0.5) + dither (< 1)
+
+
+@pytest.mark.parametrize("src_subtype,out_subtype", [("PCM_16", "PCM_16"), ("PCM_16", "PCM_24"), ("PCM_24", "PCM_24")])
+def test_unedited_integer_audio_is_not_dithered_when_no_requantization_is_needed(tmp_path, src_subtype, out_subtype):
+    """TPDF dither is only needed when samples must be rounded. An unedited 16-bit file exported
+    as 16-bit used to come back with about a quarter of its samples changed by one step."""
+    src = make_fixture(tmp_path, "src.wav", subtype=src_subtype, frames=20_000)
+    data, info = load_audio(src)
+    out = tmp_path / "o.wav"
+    res = export_audio(data, info.sample_rate, out, ExportSettings(subtype=out_subtype, dither="tpdf", seed=1))
+    assert res.dithered is False
+    np.testing.assert_array_equal(load_audio(out)[0], data)
+
+
+def test_requantized_integer_audio_is_still_dithered(tmp_path):
+    """A 24-bit file exported as 16-bit, or an edited 16-bit mix, still gets dither."""
+    data, _ = load_audio(make_fixture(tmp_path, "s24.wav", subtype="PCM_24", frames=20_000))
+    assert export_audio(data, SR, tmp_path / "a.wav", ExportSettings(subtype="PCM_16", seed=1)).dithered
+    data16, _ = load_audio(make_fixture(tmp_path, "s16.wav", subtype="PCM_16", frames=20_000))
+    assert export_audio(data16 * 0.7, SR, tmp_path / "b.wav", ExportSettings(subtype="PCM_16", seed=1)).dithered
 
 
 def test_float64_data_is_written_as_float32(tmp_path):
@@ -323,10 +344,16 @@ def test_dither_on_silence(tmp_path):
     z = np.zeros((2, SR))
     export_audio(z, SR, tmp_path / "none.wav", ExportSettings(subtype="PCM_16", dither="none"))
     assert not np.any(load_audio(tmp_path / "none.wav")[0])
-    export_audio(z, SR, tmp_path / "tpdf.wav", ExportSettings(subtype="PCM_16", dither="tpdf", seed=2))
-    codes = reference_decode(tmp_path / "tpdf.wav", np.int16)
+    # digital silence is exactly representable: nothing to round, so no dither noise is added
+    res = export_audio(z, SR, tmp_path / "tpdf.wav", ExportSettings(subtype="PCM_16", dither="tpdf", seed=2))
+    assert res.dithered is False
+    assert not np.any(reference_decode(tmp_path / "tpdf.wav", np.int16))
+    # a tiny non-zero level needs rounding and is dithered (P(|tri + x| > 0.5) ~ 1/4 for x ~ 0)
+    res = export_audio(z + 1e-9, SR, tmp_path / "tpdf2.wav", ExportSettings(subtype="PCM_16", dither="tpdf", seed=2))
+    codes = reference_decode(tmp_path / "tpdf2.wav", np.int16)
+    assert res.dithered is True
     assert set(np.unique(codes).tolist()) <= {-1, 0, 1}
-    assert np.mean(codes != 0) == pytest.approx(0.25, abs=0.01)  # P(|tri| > 0.5) = 1/4
+    assert np.mean(codes != 0) == pytest.approx(0.25, abs=0.01)
     assert np.sqrt(np.mean(codes.astype(float) ** 2)) == pytest.approx(0.5, rel=0.03)
 
 

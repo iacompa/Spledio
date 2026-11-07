@@ -109,7 +109,7 @@ Status legend:
 | AIFF, OGG, MP3, 32-bit int, 64-bit float export | Not supported yet | |
 | Mix / selected layers / stems / time range | Implemented | |
 | Sample-rate conversion on export | Implemented | polyphase, in memory |
-| TPDF dither, clipping policy (refuse / reduce level / limit / clip) | Implemented | |
+| TPDF dither, clipping policy (refuse / reduce level / limit / clip) | Implemented | dither skipped when no sample needs rounding (unedited same-depth export is bit-identical) |
 | Refuses to overwrite a source file; confirms other overwrites | Implemented | |
 
 ## AI / models
