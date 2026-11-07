@@ -1,6 +1,7 @@
 """Memory use of long-file edits: the same samples with fewer and smaller copies."""
 
 import math
+import os
 import time
 from dataclasses import replace
 
@@ -225,3 +226,107 @@ def test_clip_check_peak_is_the_whole_region_peak(s, monkeypatch):
         assert bool(warnings) == (want > 1.0)
     p.layers[0].audio[0, 150_000] = np.nan
     assert math.isnan(s._check_clip(100_000, 200_001, []))
+
+
+def _swap_case(rng, tmp_path, spill, channels=(0, 1), dtype=np.float32, held_dtype=None):
+    audio = rng.standard_normal((2, 50_000)).astype(dtype)
+    held = rng.standard_normal((len(channels), 30_000)).astype(held_dtype or dtype)
+    store = PatchStore(ram_budget_bytes=1 if spill else 1 << 30, directory=str(tmp_path))
+    h = store.put(held.copy())
+    if spill:
+        store.put(np.zeros(4, np.float32))  # the newest stays in RAM: `h` goes to disk
+        assert h in store._disk
+    return audio, held, store, h
+
+
+@pytest.mark.parametrize("spill", [False, True])
+@pytest.mark.parametrize("channels", [(0, 1), (1,)])
+def test_swap_exchanges_in_place_and_keeps_the_handle(tmp_path, monkeypatch, spill, channels):
+    import spledio.commands.history as hist
+
+    monkeypatch.setattr(hist, "_SWAP_BLOCK", 4096)  # several blocks per row
+    audio, held, store, h = _swap_case(np.random.default_rng(11), tmp_path, spill, channels)
+    want_audio, want_held = audio.copy(), audio[list(channels), 7000:37000].copy()
+    for i, c in enumerate(channels):
+        want_audio[c, 7000:37000] = held[i]
+    ram = store.ram_bytes
+    store.swap(h, audio, channels, 7000)
+    assert np.array_equal(audio, want_audio) and np.array_equal(store.get(h), want_held)
+    assert store.ram_bytes == ram and (h in store._disk) == spill
+    assert not [p for p in os.listdir(tmp_path) if p.endswith(".swap")]
+    store.swap(h, audio, channels, 7000)  # and back
+    assert np.array_equal(store.get(h), held)
+    store.close()
+
+
+@pytest.mark.parametrize("fail_at", [1, 2, 3, 7, 11])
+def test_interrupted_swap_in_ram_leaves_both_as_they_were(tmp_path, monkeypatch, fail_at):
+    import spledio.commands.history as hist
+
+    monkeypatch.setattr(hist, "_SWAP_BLOCK", 4096)
+    audio, held, store, h = _swap_case(np.random.default_rng(12), tmp_path, False)
+    a0 = audio.copy()
+    real, calls = np.copyto, [0]
+
+    def flaky(*args, **kw):
+        calls[0] += 1
+        real(*args, **kw)
+        if calls[0] == fail_at:
+            raise MemoryError("simulated")
+
+    monkeypatch.setattr(np, "copyto", flaky)
+    with pytest.raises(MemoryError):
+        store.swap(h, audio, (0, 1), 7000)
+    monkeypatch.setattr(np, "copyto", real)
+    assert np.array_equal(audio, a0) and np.array_equal(store.get(h), held)
+    store.close()
+
+
+def test_interrupted_swap_on_disk_leaves_both_as_they_were(tmp_path, monkeypatch):
+    import spledio.commands.history as hist
+
+    audio, held, store, h = _swap_case(np.random.default_rng(13), tmp_path, True)
+    a0 = audio.copy()
+    real = hist._stream_rows
+
+    def fails_halfway(f, audio, ch, start, n):  # writes some samples into the layer, then fails
+        audio[ch[0], start : start + 100] = 9.0
+        monkeypatch.setattr(hist, "_stream_rows", real)
+        raise OSError("simulated read error")
+
+    monkeypatch.setattr(hist, "_stream_rows", fails_halfway)
+    with pytest.raises(OSError):
+        store.swap(h, audio, (0, 1), 7000)
+    assert np.array_equal(audio, a0) and np.array_equal(store.get(h), held)
+    assert not [p for p in os.listdir(tmp_path) if p.endswith(".swap")]
+    store.close()
+
+
+@pytest.mark.parametrize("spill", [False, True])
+def test_swap_of_samples_stored_in_another_dtype_goes_through_one_copy(tmp_path, spill):
+    audio, held, store, h = _swap_case(np.random.default_rng(14), tmp_path, spill, held_dtype=np.float64)
+    want_audio, want_held = audio.copy(), audio[:, 7000:37000].copy()
+    want_audio[:, 7000:37000] = held  # rounded to the layer's float32, as before
+    store.swap(h, audio, (0, 1), 7000)
+    assert np.array_equal(audio, want_audio) and np.array_equal(store.get(h), want_held)
+    store.close()
+
+
+def test_undoing_a_spilled_area_keeps_its_component_in_ram(tmp_path):
+    rng = np.random.default_rng(15)
+    sess = EditorSession.from_array(0.2 * rng.standard_normal((2, 10 * SR)), SR)
+    span = 2 * 8 * SR * 4
+    sess.history.store = store = PatchStore(ram_budget_bytes=int(1.5 * span), directory=str(tmp_path))
+    orig = sess.project.layers[0].audio.copy()
+    sess.set_selection(_sel(1.0, 9.0, 300.0, 3000.0))
+    sess.adjust_area(target_db=-6.0)
+    edited = sess.project.layers[0].audio.copy()
+    c = sess.areas[0].component
+    assert c in store._ram and store.disk_count == 1  # the samples from before went to disk
+    ram = store.ram_bytes
+    sess.undo()
+    assert np.array_equal(sess.project.layers[0].audio, orig)
+    assert c in store._ram and store.disk_count == 1 and store.ram_bytes == ram  # swapped on disk, nothing moved
+    sess.redo()
+    assert np.array_equal(sess.project.layers[0].audio, edited)
+    sess.close()

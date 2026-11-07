@@ -78,6 +78,60 @@ class PatchStore:
             raise KeyError(f"patch {h} was released")
         return np.load(path, allow_pickle=False)
 
+    def swap(self, h: int, audio: np.ndarray, channels: tuple[int, ...], start: int) -> None:
+        """Exchange the samples of ``h`` (``(len(channels), n)``) with rows ``channels`` of
+        ``audio[:, start:start+n]``, in place and block by block: no full-size copy is made,
+        whether ``h`` is in RAM or on disk (there it is streamed). ``h`` keeps its handle, size
+        and place (RAM or disk). If it fails, ``audio`` and ``h`` are as they were."""
+        ch = tuple(channels)
+        with self._lock:  # no spill or read of `h` while it is half swapped
+            if h in self._ram:
+                a = self._ram[h]
+                if a.shape[0] == len(ch) and a.dtype == audio.dtype and a.ndim == 2:
+                    try:
+                        a.setflags(write=True)
+                    except ValueError:
+                        pass
+                    else:
+                        try:
+                            _swap_blocks(a, audio, ch, start)
+                        finally:
+                            a.setflags(write=False)
+                        return
+            else:
+                path = self._disk.get(h)
+                if path is None:
+                    raise KeyError(f"patch {h} was released")
+                if _swap_file(path, audio, ch, start):
+                    return
+        # anything else (e.g. stored in another dtype): swap through one full copy
+        held = self.get(h)
+        cur = read_rows(audio, ch, start, start + held.shape[1])
+        write_rows(audio, ch, start, held)
+        try:
+            self._replace(h, cur)
+        except BaseException:
+            write_rows(audio, ch, start, cur)
+            raise
+
+    def _replace(self, h: int, arr: np.ndarray) -> None:
+        a = np.ascontiguousarray(arr)
+        a.setflags(write=False)
+        with self._lock:
+            old = self._ram.get(h)
+            if old is not None:
+                self._ram[h] = a
+                self._bytes += a.nbytes - old.nbytes
+                return
+            path = self._disk[h]
+            try:
+                with open(path + ".swap", "wb") as f:
+                    np.save(f, a, allow_pickle=False)
+                os.replace(path + ".swap", path)
+            except BaseException:
+                _remove(path + ".swap")
+                raise
+
     def release(self, h: int) -> None:
         with self._lock:
             self._hot.discard(h)
@@ -121,6 +175,118 @@ class PatchStore:
         if self._owns_dir and self._dir is not None:
             shutil.rmtree(self._dir, ignore_errors=True)
             self._dir = None
+
+
+_SWAP_BLOCK = 1 << 18  # samples per row block when stored samples are swapped with a layer's
+
+
+def _row_blocks(n_rows: int, n: int):
+    for i in range(n_rows):
+        for x in range(0, n, _SWAP_BLOCK):
+            yield i, x, min(n, x + _SWAP_BLOCK)
+
+
+def _swap_blocks(a: np.ndarray, audio: np.ndarray, ch: tuple[int, ...], start: int) -> None:
+    """Swap ``a`` (len(ch), n) with rows ``ch`` of ``audio`` at ``start``, one block at a time.
+    The swap is its own inverse: if it is interrupted, the blocks done so far are swapped back."""
+    n = a.shape[1]
+    tmp = np.empty(min(n, _SWAP_BLOCK), dtype=a.dtype)
+    blocks = list(_row_blocks(len(ch), n))
+
+    def views(blk):
+        i, x, y = blk
+        return tmp[: y - x], a[i, x:y], audio[ch[i], start + x : start + y]
+
+    done, filled = 0, False
+    try:
+        for blk in blocks:
+            t, held, row = views(blk)
+            np.copyto(t, held)
+            filled = True
+            np.copyto(held, row)
+            np.copyto(row, t)
+            filled = False
+            done += 1
+    except BaseException:
+        if filled:  # in the middle of a block: finish it if its stored part already has the layer's samples
+            t, held, row = views(blocks[done])
+            if not np.array_equal(held, t):
+                np.copyto(row, t)
+                done += 1
+        for blk in reversed(blocks[:done]):
+            t, held, row = views(blk)
+            np.copyto(t, held)
+            np.copyto(held, row)
+            np.copyto(row, t)
+        raise
+
+
+def _npy_header(f) -> tuple[tuple[int, ...], bool, np.dtype] | None:
+    """(shape, fortran_order, dtype) of an .npy file, ``f`` then at its first data byte; None for a
+    header version this does not read."""
+    fmt = np.lib.format
+    version = fmt.read_magic(f)
+    if version == (1, 0):
+        shape, fortran, dtype = fmt.read_array_header_1_0(f)
+    elif version == (2, 0):
+        shape, fortran, dtype = fmt.read_array_header_2_0(f)
+    else:
+        return None
+    return tuple(shape), bool(fortran), dtype
+
+
+def _stream_rows(f, audio: np.ndarray, ch: tuple[int, ...], start: int, n: int) -> None:
+    """Read (len(ch), n) C-order samples from ``f`` into rows ``ch`` of ``audio`` at ``start``."""
+    buf = np.empty(min(n, _SWAP_BLOCK), dtype=audio.dtype)
+    for i, x, y in _row_blocks(len(ch), n):
+        v = buf[: y - x]
+        mv = memoryview(v).cast("B")
+        if f.readinto(mv) != mv.nbytes:
+            raise OSError("stored undo samples are shorter than expected")
+        audio[ch[i], start + x : start + y] = v
+
+
+def _swap_file(path: str, audio: np.ndarray, ch: tuple[int, ...], start: int) -> bool:
+    """Swap a spilled ``.npy`` with layer rows, streaming: the layer's rows go to a new file, the
+    old file is read into the layer, and the new file replaces it. False (nothing changed) if the
+    file is not a plain C-order array of the layer's dtype with one row per channel."""
+    with open(path, "rb") as f:
+        hdr = _npy_header(f)
+    if hdr is None or len(hdr[0]) != 2 or hdr[0][0] != len(ch) or hdr[1] or hdr[2] != audio.dtype:
+        return False
+    shape = hdr[0]
+    n = shape[1]
+    fmt = np.lib.format
+    new_path = path + ".swap"
+    try:
+        with open(new_path, "wb") as g:  # 1. the layer's current rows (the layer is not touched yet)
+            fmt.write_array_header_1_0(g, {"descr": fmt.dtype_to_descr(audio.dtype), "fortran_order": False,
+                                           "shape": shape})
+            for i, x, y in _row_blocks(len(ch), n):
+                g.write(memoryview(np.ascontiguousarray(audio[ch[i], start + x : start + y])).cast("B"))
+    except BaseException:
+        _remove(new_path)
+        raise
+    try:
+        with open(path, "rb") as f:  # 2. the stored samples into the layer
+            if _npy_header(f) != hdr:
+                raise OSError("stored undo samples changed on disk")
+            _stream_rows(f, audio, ch, start, n)
+        os.replace(new_path, path)  # 3. the layer's old rows are now the stored ones
+    except BaseException:
+        with open(new_path, "rb") as g:  # put the layer's rows back
+            _npy_header(g)
+            _stream_rows(g, audio, ch, start, n)
+        _remove(new_path)
+        raise
+    return True
+
+
+def _remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 @dataclass
@@ -241,15 +407,8 @@ def write_patch(project: "Project", store: PatchStore, p: LayerPatch, use_after:
     """Bring ``p`` to the applied (``use_after``) or the undone state: swap the held samples with the layer's."""
     if p.applied != use_after:
         layer = project.layer(p.layer_id)
-        held = store.get(p.held)  # may load from disk; nothing has changed yet
-        h = store.put(read_rows(layer.audio, p.channels, p.start, p.end))
-        try:
-            write_rows(layer.audio, p.channels, p.start, held)
-        except BaseException:
-            store.release(h)
-            raise
-        store.release(p.held)
-        p.held, p.applied = h, use_after
+        store.swap(p.held, layer.audio, p.channels, p.start)  # in place, block by block (RAM or disk)
+        p.applied = use_after
         layer.bump()
     return (p.layer_id, p.start, p.end)
 
