@@ -124,7 +124,7 @@ bundled. The library-replacement steps in `licenses/SOURCE-AND-REPLACING-LIBRARI
 copy of the app with a modified `libsndfile_arm64.dylib`: smoke test **PASSED** (details in
 [RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07)).
 
-**First Developer ID signed and notarized build** (commit `b47334c`, new icon, bundle id `com.iacompa.spledio`):
+**First Developer ID signed and notarized build, released as 1.1** (commit `d5110f9`, new icon, bundle id `com.iacompa.spledio`):
 425 passed, 1 skipped (run on that commit just before the build). Smoke test **PASSED** unsigned, after
 signing, and on a copy taken out of the notarized DMG. Notarization **Accepted** with no issues; stapled.
 Gatekeeper (`spctl`) **accepts** a quarantined copy of the DMG and the app copied out of it as "Notarized
