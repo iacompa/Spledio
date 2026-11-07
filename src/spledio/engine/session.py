@@ -645,8 +645,13 @@ class EditorSession:
         return self._commit(cmd, change)
 
     # ------------------------------------------------------- timeline ops
-    def _time_range_samples(self, sel: Selection | None = None) -> tuple[int, int]:
-        sel = sel or self.selection_or_error()
+    def time_range_samples(self, sel: Selection | None = None) -> tuple[int, int]:
+        """The sample span Delete/Crop Time act on: the drawn shape's time extent.
+
+        The feather is a soft spectral edge, not part of the time range, so it is
+        ignored here; otherwise a feathered box would delete (or keep) more time
+        than the user drew."""
+        sel = (sel or self.selection_or_error()).with_feather(enabled=False)
         b = sel.bounds(self.project.duration, self.project.nyquist)
         if b is None:
             raise EditError("Empty selection")
@@ -678,13 +683,13 @@ class EditorSession:
 
     def delete_time(self) -> EditResult:
         """Remove the selection's time span from every layer (shortens the project)."""
-        a, e = self._time_range_samples()
+        a, e = self.time_range_samples()
         return self._timeline(f"Delete time {a / self.sample_rate:.3f}-{e / self.sample_rate:.3f} s (all layers)",
                               lambda x: np.concatenate([x[:, :a], x[:, e:]], axis=1), {"start": a, "end": e})
 
     def crop_time(self) -> EditResult:
         """Keep only the selection's time span in every layer."""
-        a, e = self._time_range_samples()
+        a, e = self.time_range_samples()
         return self._timeline(f"Crop to {a / self.sample_rate:.3f}-{e / self.sample_rate:.3f} s (all layers)",
                               lambda x: x[:, a:e].copy(), {"start": a, "end": e})
 

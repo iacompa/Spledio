@@ -969,9 +969,11 @@ class MainWindow(QMainWindow):
 
     def delete_time(self):
         s = self.ctl.session
-        b = s.selection.bounds(s.project.duration, s.project.nyquist)
+        a, e = self.ctl.safe(s.time_range_samples) or (None, None)
+        if a is None:
+            return
         r = QMessageBox.warning(self, "Delete time",
-                                f"Remove {b[0]:.3f}–{b[1]:.3f} s from ALL {len(s.project.layers)} layer(s)?\n\n"
+                                f"Remove {a / s.sample_rate:.3f}–{e / s.sample_rate:.3f} s from ALL {len(s.project.layers)} layer(s)?\n\n"
                                 "This SHORTENS the recording (unlike Delete Spectral Content). All layers are rippled together "
                                 "to stay in sync. Undo restores it.", QMessageBox.Ok | QMessageBox.Cancel)
         if r == QMessageBox.Ok:

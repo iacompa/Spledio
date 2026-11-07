@@ -274,6 +274,23 @@ def test_ab_and_difference_refuse_edits_that_no_longer_line_up(session):
 
 
 
+def test_delete_and_crop_time_use_the_drawn_span_not_the_feather(session):
+    """Time feather softens the edges of spectral edits. Delete / Crop Time used the feathered
+    extent, so a 0.2 s box with a 50 ms feather deleted 0.3 s (and Crop kept 0.3 s)."""
+    s = session
+    n = s.project.n_frames
+    s.set_selection(Selection.of(RectShape(1.0, 1.2, 2300, 2700), feather_t=0.05, feather_f=40))
+    s.delete_time()
+    assert s.project.n_frames == n - int(0.2 * SR)
+    s.undo()
+    s.set_selection(Selection.of(RectShape(1.0, 1.2, 2300, 2700), feather_t=0.05))
+    s.crop_time()
+    assert s.project.n_frames == int(0.2 * SR)
+    s.undo()
+    s.set_selection(Selection.of(RectShape(1.0, 1.2, 2300, 2700), feather_t=0.05))
+    assert s.time_range_samples() == (int(1.0 * SR), int(1.2 * SR))  # what the confirmation shows
+
+
 # ---------------------------------------------------------------- 18. clipping
 def test_boost_triggers_clipping_warning_and_float_export_not_clipped(session, tmp_path):
     from spledio.audio.export import ClippingError

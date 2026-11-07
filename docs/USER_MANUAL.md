@@ -158,6 +158,7 @@ Other tools, all undoable:
   the level of each layer. A new layer starts at the level, polarity, mute and solo of the layer it came
   from, so the mix sounds the same until you change it. You can export layers as separate files (stems).
 * **Time:** delete or crop time, and insert silence. These change the length of the whole project.
+  Delete and crop use the time span you drew; the selection's feather does not widen it.
 
 ---
 
