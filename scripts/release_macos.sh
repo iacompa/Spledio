@@ -46,6 +46,16 @@ fi
 echo "Spledio $VERSION · bundle id $BUNDLE_ID · $( [[ "$UNSIGNED" == "1" ]] && echo 'UNSIGNED test build' || echo "signing as: $SIGN" )"
 
 step "Build environment ($BUILD_VENV)"
+command -v "$PYTHON" >/dev/null || die "Python not found: $PYTHON"
+WANT_BASE="$("$PYTHON" -c 'import sys; print(sys.base_prefix)')"
+echo "building with Python $("$PYTHON" -c 'import sys; print(sys.version.split()[0])') from $WANT_BASE"
+if [[ -x "$BUILD_VENV/bin/python" ]]; then
+  HAVE_BASE="$("$BUILD_VENV/bin/python" -c 'import sys; print(sys.base_prefix)' 2>/dev/null || echo unknown)"
+  if [[ "$HAVE_BASE" != "$WANT_BASE" ]]; then
+    echo "the build venv was made with another Python ($HAVE_BASE): recreating it"
+    rm -rf "$BUILD_VENV"
+  fi
+fi
 if [[ ! -x "$BUILD_VENV/bin/python" ]]; then
   "$PYTHON" -m venv "$BUILD_VENV"
 fi
@@ -103,6 +113,14 @@ fi
 for lib in libsndfile libportaudio; do
   find "$APP" -name "${lib}*" | grep -q . || die "$lib missing from the bundle"
 done
+# The lowest macOS the app runs on = the highest minimum of any binary inside it. Recorded in
+# Info.plist so older Macs show "needs macOS X" instead of crashing (must happen before signing).
+MIN_MACOS="$("$BUILD_VENV/bin/python" scripts/bundle_min_macos.py "$APP")"
+plutil -replace LSMinimumSystemVersion -string "$MIN_MACOS" "$PLIST"
+echo "minimum macOS: $MIN_MACOS"
+if [[ "$UNSIGNED" != "1" && "${MIN_MACOS%%.*}" -ge 26 && "${ALLOW_MACOS26_ONLY:-0}" != "1" ]]; then
+  die "this build needs macOS $MIN_MACOS (built with the Homebrew Python?). Build with a python.org Python (docs/RELEASE_MACOS.md), or set ALLOW_MACOS26_ONLY=1"
+fi
 "$APP/Contents/MacOS/$APP_NAME" --version
 SMOKE_WAV="$(mktemp -d)/smoke.wav"
 "$BUILD_VENV/bin/python" scripts/make_fixture.py "$SMOKE_WAV" >/dev/null
@@ -170,7 +188,7 @@ step "Checksum"
 
 cat <<EOF
 
-Done: $DMG
+Done: $DMG   (Spledio $VERSION, Apple Silicon, macOS $MIN_MACOS or later)
 
 Next (signed builds only):
   1. Test the DMG on a clean Mac or a new user account (open, play, edit, export, save, reopen).
