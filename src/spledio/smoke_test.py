@@ -165,7 +165,7 @@ def run(app, win, path: str, timeout: float = 60.0, on_done=None, play_silence: 
         s = ctl.session
         p = s.project
         check("open audio file", p.n_frames > 0, f"{p.sample_rate} Hz, {p.channels} ch, {p.duration:.2f} s")
-        state["orig"] = s.render_full_mix().copy()
+        state["orig"] = s.render_full_mix()  # a fresh float32 array
         wait(lambda: win.editor.canvas.is_settled() and win.editor.canvas.render_count > 0, s3_rendered,
              "spectrogram renders")
 
@@ -198,7 +198,7 @@ def run(app, win, path: str, timeout: float = 60.0, on_done=None, play_silence: 
         s.export(out, ExportSettings(format="WAV", subtype="FLOAT"))
         import soundfile as sf
 
-        data, rate = sf.read(out, dtype="float64", always_2d=True)
+        data, rate = sf.read(out, dtype="float32", always_2d=True)  # a FLOAT export: exact in float32
         err = float(np.max(np.abs(data.T - mix))) if data.T.shape == mix.shape else float("inf")
         check("WAV export equals the playback mix", rate == sr and err < 1e-6, f"max difference {err:.1e}")
         proj = os.path.join(tmp, "smoke.spledio")

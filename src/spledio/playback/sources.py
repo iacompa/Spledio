@@ -60,6 +60,24 @@ def _to_playback_layout(audio, what: str) -> np.ndarray:
     return data
 
 
+_SANITIZE_BLOCK = 1 << 16  # frames per block when an adopted buffer is checked for non-finite samples
+
+
+def _adopt_playback_layout(data, what: str) -> np.ndarray:
+    """Take over a caller's C-contiguous ``(frames, channels)`` float32 array without copying:
+    non-finite samples are zeroed in place, block by block, then it is made read-only."""
+    if not (isinstance(data, np.ndarray) and data.dtype == np.float32 and data.ndim == 2
+            and data.shape[1] >= 1 and data.flags.c_contiguous and data.flags.writeable):
+        raise ValueError(f"{what} must be a writeable C-contiguous (frames, channels) float32 array")
+    for a in range(0, data.shape[0], _SANITIZE_BLOCK):
+        blk = data[a : a + _SANITIZE_BLOCK]
+        bad = ~np.isfinite(blk)
+        if bad.any():
+            blk[bad] = 0.0
+    data.flags.writeable = False
+    return data
+
+
 class PlaybackSource:
     """Base class: an immutable block of audio on the project timeline.
 
@@ -176,7 +194,21 @@ class ArraySource(PlaybackSource):
         offset: int = 0,
         total_frames: int | None = None,
     ) -> None:
-        data = _to_playback_layout(audio, "audio")
+        self._setup(_to_playback_layout(audio, "audio"), sample_rate, label, offset, total_frames)
+
+    @classmethod
+    def adopt(cls, data: np.ndarray, sample_rate: int, label: str = "", offset: int = 0,
+              total_frames: int | None = None) -> "ArraySource":
+        """A source around ``data`` itself – a writeable, C-contiguous ``(frames, channels)``
+        float32 array (already the playback layout) that the caller hands over and never
+        touches again – instead of a private copy. Non-finite samples are zeroed in place and
+        the array becomes read-only. For whole-file buffers, where the copy would double the
+        memory for a moment."""
+        src = cls.__new__(cls)
+        src._setup(_adopt_playback_layout(data, "data"), sample_rate, label, offset, total_frames)
+        return src
+
+    def _setup(self, data: np.ndarray, sample_rate: int, label: str, offset: int, total_frames: int | None) -> None:
         off = int(offset)
         buf_len = data.shape[0]
         if total_frames is None:

@@ -2,9 +2,11 @@
 sample-rate conversion and atomic writing (libsndfile via ``soundfile``).
 
 Input audio uses the engine convention: ``numpy.ndarray`` of shape
-**(channels, frames)**, any floating dtype. Processing math is float64; data
-is converted to soundfile's (frames, channels) layout only when it is handed
-to libsndfile, one block at a time.
+**(channels, frames)**, any floating dtype – or a lazily rendered signal with
+``renders_blocks = True`` (e.g. :meth:`Project.mix_view`), which is only ever
+read in blocks, so a long mix is not held whole. Processing math is float64;
+data is converted to soundfile's (frames, channels) layout only when it is
+handed to libsndfile, one block at a time.
 
 What happens to the samples, in order:
 
@@ -197,7 +199,8 @@ class PeakReport:
 
 
 def _as_float_2d(data: Any, what: str = "audio data") -> np.ndarray:
-    arr = data if isinstance(data, np.ndarray) else np.asarray(data)
+    lazy = not isinstance(data, np.ndarray) and getattr(data, "renders_blocks", False)
+    arr = data if isinstance(data, np.ndarray) or lazy else np.asarray(data)
     if arr.ndim != 2:
         raise ExportError(f"{what} must be a 2-D (channels, frames) array; got shape {arr.shape}")
     if not np.issubdtype(arr.dtype, np.floating):
@@ -470,7 +473,14 @@ def _resample(arr: np.ndarray, up: int, down: int) -> np.ndarray:
     channels, frames = arr.shape
     out = np.empty((channels, _resampled_length(frames, up, down)), dtype=np.float64)
     for c in range(channels):
-        out[c] = signal.resample_poly(np.asarray(arr[c], dtype=np.float64), up, down, window=h)
+        if isinstance(arr, np.ndarray):
+            row = np.asarray(arr[c], dtype=np.float64)
+        else:  # lazily rendered: build this channel block by block
+            row = np.empty(frames, dtype=np.float64)
+            for a in range(0, frames, _BLOCK):
+                row[a : a + _BLOCK] = arr[c, a : a + _BLOCK]
+        out[c] = signal.resample_poly(row, up, down, window=h)
+        del row
     return out
 
 

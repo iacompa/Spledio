@@ -80,6 +80,8 @@ from enum import IntEnum
 from typing import Callable
 
 import numpy as np
+
+from spledio.ram import tile_cache_budget
 import scipy.fft as sfft
 
 from spledio.dsp.stft import STFTConfig, full_frame_range, get_window, magnitude_reference, stft
@@ -395,11 +397,12 @@ class SpectrogramAnalyzer:
 
     def __init__(
         self,
-        max_cache_bytes: int = 512 * 2**20,
+        max_cache_bytes: int | None = None,
         executor: cf.Executor | None = None,
         on_tile_ready: Callable[[], None] | None = None,
     ):
-        self.max_cache_bytes = int(max_cache_bytes)
+        # default: sized to this machine's RAM (see spledio.ram.tile_cache_budget)
+        self.max_cache_bytes = int(tile_cache_budget() if max_cache_bytes is None else max_cache_bytes)
         self._own_executor = executor is None
         self._executor = executor or cf.ThreadPoolExecutor(
             max_workers=_default_workers(), thread_name_prefix="spledio-spectrogram"

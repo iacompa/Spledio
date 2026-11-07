@@ -2,6 +2,7 @@
 
 import math
 import time
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -135,4 +136,76 @@ def test_patch_store_spills_and_swaps_back_exactly(tmp_path):
     for want in states[1:]:
         sess.redo()
         assert np.array_equal(sess.project.layers[0].audio, want)
+    sess.close()
+
+
+def test_block_rendered_mix_and_export_match_the_whole_render(s, tmp_path):
+    import soundfile as sf
+
+    from spledio.audio.export import ExportSettings, analyze_peaks, export_audio
+    from spledio.domain import project as project_mod
+
+    s.set_selection(_sel(2.0, 12.0, 300.0, 5000.0))
+    s.extract_to_new_layer()
+    s.set_layer_props(s.project.layers[1].id, gain_db=-2.5, polarity_inverted=True)
+    p = s.project
+    whole = p.render_mix()
+    old_block = project_mod.MIX_BLOCK
+    project_mod.MIX_BLOCK = 7919  # odd block size: block edges anywhere
+    try:
+        assert np.array_equal(p.render_mix(dtype=np.float32), whole.astype(np.float32))
+        assert np.array_equal(p.render_mix(1234, 99_999, dtype=np.float32), whole[:, 1234:99_999].astype(np.float32))
+    finally:
+        project_mod.MIX_BLOCK = old_block
+    view = p.mix_view()
+    assert view.shape == whole.shape and np.array_equal(np.asarray(view), whole)
+    assert np.array_equal(view[:, 5000:6000], whole[:, 5000:6000]) and np.array_equal(view[1], whole[1])
+    assert np.array_equal(view.range(100, 900)[:, 10:20], whole[:, 110:120])
+    assert analyze_peaks(view) == analyze_peaks(whole)
+    for st in (ExportSettings(subtype="FLOAT"), ExportSettings(subtype="PCM_24", clip_policy="limit", seed=3),
+               ExportSettings(subtype="PCM_16", sample_rate=32000, clip_policy="reduce_level", seed=4)):
+        a, b = str(tmp_path / "a.wav"), str(tmp_path / "b.wav")
+        ra = export_audio(whole, SR, a, replace(st, overwrite=True))
+        rb = export_audio(view, SR, b, replace(st, overwrite=True))
+        assert replace(rb, path=ra.path) == ra
+        assert np.array_equal(sf.read(a, dtype="float64")[0], sf.read(b, dtype="float64")[0])
+
+
+def test_adopted_playback_buffer_is_not_copied_and_is_sanitised():
+    from spledio.playback.sources import ArraySource
+
+    buf = np.ones((1000, 2), dtype=np.float32)
+    buf[10, 1] = np.nan
+    buf[999, 0] = np.inf
+    src = ArraySource.adopt(buf, SR, label="Mix", total_frames=1000)
+    assert src.data is buf and not buf.flags.writeable
+    assert buf[10, 1] == 0.0 and buf[999, 0] == 0.0 and np.count_nonzero(buf == 1.0) == 1998
+    out = np.empty((16, 2), dtype=np.float32)
+    assert src.read_into(992, out) == 8 and np.array_equal(out[:8], buf[992:]) and not out[8:].any()
+    with pytest.raises(ValueError):
+        ArraySource.adopt(np.ones((2, 1000), dtype=np.float32).T, SR)  # not C-contiguous
+
+
+def test_budgets_follow_the_machine_ram():
+    from spledio.ram import MB, tile_cache_budget, undo_ram_budget
+
+    GB = 1024 * MB
+    assert tile_cache_budget(8 * GB) == 256 * MB and tile_cache_budget(16 * GB) == 512 * MB
+    assert tile_cache_budget(2 * GB) == 128 * MB and tile_cache_budget(64 * GB) == 512 * MB
+    assert undo_ram_budget(8 * GB) == 512 * MB and undo_ram_budget(24 * GB) == 768 * MB
+    assert undo_ram_budget(2 * GB) == 256 * MB
+
+
+def test_area_components_stay_in_ram_when_undo_data_moves_to_disk(tmp_path):
+    rng = np.random.default_rng(3)
+    sess = EditorSession.from_array(0.2 * rng.standard_normal((2, 10 * SR)), SR)
+    span = 2 * 8 * SR * 4  # one float32 copy of an 8 s stereo span
+    sess.history.store = PatchStore(ram_budget_bytes=int(2.5 * span), directory=str(tmp_path))
+    sess.set_selection(_sel(1.0, 9.0, 300.0, 3000.0))
+    sess.adjust_area(target_db=-6.0)
+    a = sess.areas[0]
+    for i in range(3):  # separate undo steps, each keeps the samples from before it
+        sess.adjust_area(direction=-1, requested_at=time.monotonic() + 10 * (i + 1))
+    store = sess.history.store
+    assert store.disk_count >= 2 and a.component in store._ram  # undo data went to disk first
     sess.close()

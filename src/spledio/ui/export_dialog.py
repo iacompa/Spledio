@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 import os
 
-import numpy as np
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -140,16 +139,9 @@ class ExportDialog(QDialog):
             self.path.setText(p)
 
     def render_data(self):
-        s = self.session
+        """What the export will write (rendered block by block as it is measured)."""
         scope = self.scope.currentData()
-        if scope == "layers":
-            return s.project.render_mix(layers=[s.project.layer(i) for i in self.layer_ids])
-        if scope == "selection":
-            comp = s.component()
-            d = np.zeros((s.project.channels, s.project.n_frames))
-            d[:, comp.start : comp.end] = comp.data * s.active_layer.mix_factor
-            return d
-        return s.project.render_mix()
+        return self.session.export_source(scope if scope in ("layers", "selection") else "mix", self.layer_ids)
 
     def _measure(self):
         try:

@@ -23,6 +23,7 @@ import numpy as np
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from spledio.commands.history import Change
+from spledio.domain.project import MIX_BLOCK
 from spledio.dsp.spectral import Cancelled
 from spledio.engine.session import EditError, EditorSession, SessionEvent
 from spledio.playback.sources import ArraySource, OverlaySource, PlaybackSource
@@ -539,23 +540,32 @@ class EditorController(QObject):
         if s is None:
             self._mix_source = None
             return
-        mix = monitor_layout(s.render_full_mix())
-        self._mix_source = ArraySource(mix, s.sample_rate, label="Mix", total_frames=s.project.n_frames)
+        p = s.project
+        buf = np.empty((p.n_frames, 2 if p.channels == 1 else p.channels), dtype=np.float32)
+        self._render_mix_into(buf, 0, p.n_frames)
+        self._mix_source = ArraySource.adopt(buf, s.sample_rate, label="Mix", total_frames=p.n_frames)
         if self.audition.mode == "mix":
             self.playback.set_source(self._mix_source, keep_position=True)
+
+    def _render_mix_into(self, buf: np.ndarray, a: int, b: int) -> None:
+        """``buf[a:b]`` = the monitoring layout of the float32 mix, block by block (no whole-file temporaries)."""
+        s = self.session
+        for i in range(a, b, MIX_BLOCK):
+            j = min(b, i + MIX_BLOCK)
+            buf[i:j] = monitor_layout(s.project.render_mix(i, j, dtype=np.float32)).T
 
     def _update_mix_regions(self, change: Change) -> None:
         s = self.session
         if s is None or self._mix_source is None or not change.audio:
             self._rebuild_mix_source()
             return
-        buf = np.array(self._mix_source.data)  # (frames, ch) copy
-        if buf.shape[0] != s.project.n_frames:
+        if self._mix_source.data.shape[0] != s.project.n_frames:
             self._rebuild_mix_source()
             return
+        buf = self._mix_source.data.copy()  # the playing buffer stays immutable: one new copy, handed over
         for _lid, a, b in change.audio:
-            buf[a:b] = monitor_layout(s.project.render_mix(a, b, dtype=np.float32)).T
-        self._mix_source = ArraySource(buf.T, s.sample_rate, label="Mix", total_frames=s.project.n_frames)
+            self._render_mix_into(buf, a, b)
+        self._mix_source = ArraySource.adopt(buf, s.sample_rate, label="Mix", total_frames=s.project.n_frames)
         if self.audition.mode == "mix":
             self.playback.set_source(self._mix_source, keep_position=True)
 

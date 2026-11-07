@@ -13,7 +13,7 @@ import math
 import os
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 import numpy as np
@@ -32,12 +32,13 @@ from spledio.commands.history import (
     LayerPatch,
     TimelineCommand,
     make_patch,
+    write_patch,
     patch_in_place,
     patch_versions,
     read_rows,
     write_rows,
 )
-from spledio.domain.project import Asset, Layer, Project, new_id
+from spledio.domain.project import Asset, BlockAudio, Layer, Project, new_id
 from spledio.engine.areas import (
     MERGE_WINDOW_S,
     AdjustArea,
@@ -45,6 +46,7 @@ from spledio.engine.areas import (
     AreasStateCommand,
     area_contains,
     change_area_gain,
+    factor,
     gain_text,
     step_gain,
 )
@@ -821,12 +823,10 @@ class EditorSession:
                 g = float(target_db) if target_db is not None else step_gain(0.0, direction, big)
                 if g == 0.0:
                     raise EditError("0 dB changes nothing – press ↓ to make it quieter or ↑ to make it louder")
-                start, data, chans = self._storage_component(sel, layer)
+                start, new_c, chans = self._storage_component(sel, layer)
                 number = max((x.number for x in self.areas), default=0) + 1
-                a = AdjustArea(new_id("area"), number, layer.id, sel, 0.0, start, data.shape[1], chans,
-                               store.put(data), time.time())
-                del data
-                self._component_handles.add(a.component)
+                a = AdjustArea(new_id("area"), number, layer.id, sel, 0.0, start, new_c.shape[1], chans,
+                               -1, time.time())  # component handle: stored below, once the audio has changed
                 new_area = True
             else:
                 layer = self.project.layer(a.layer_id)
@@ -866,13 +866,24 @@ class EditorSession:
                 peak = self._check_clip(a.start, a.end, warnings) if g > 0 else None
                 self._after_change(change, label)
                 return EditResult(cmd, warnings, peak)
-            try:
+            if new_area:
+                # The samples from before go into the store first and the component last, so when the
+                # store moves data to disk the component (read on every change of the area) stays in RAM.
+                d = factor(g) - factor(0.0)
+                patch = patch_in_place(store, layer, a.start, a.length, a.channels,
+                                       lambda: add_scaled_in_place(layer.audio, a.start, a.channels, new_c, d))
+                try:
+                    h = store.put(new_c, hot=True)
+                except BaseException:
+                    write_patch(self.project, store, patch, False)
+                    store.release(patch.held)
+                    raise
+                del new_c
+                self._component_handles.add(h)
+                a, na = replace(a, component=h), replace(na, component=h)
+                after = before + (na,)
+            else:
                 patch = self._area_patch(layer, a, g, a.gain_db)
-            except BaseException:
-                if new_area:
-                    store.release(a.component)
-                    self._component_handles.discard(a.component)
-                raise
             cmd = AreaCommand(label, self, patch, before, after, a.id, "adjust", params)
             change = cmd.redo(self.project, store)  # the patch is applied already: sets the area list
             self.active_area_id = a.id
@@ -1045,28 +1056,39 @@ class EditorSession:
         'selection' (selected component of the active layer)."""
         from spledio.audio.export import export_audio
 
-        if scope == "mix":
-            data = self.project.render_mix()
-            start = 0
-        elif scope == "layers":
-            if not layer_ids:
-                raise EditError("Choose at least one layer to export")
-            data = self.project.render_mix(layers=[self.project.layer(i) for i in layer_ids])
-            start = 0
-        elif scope == "selection":
-            comp = self.component()
-            data = np.zeros((self.project.channels, self.project.n_frames))
-            data[:, comp.start : comp.end] = comp.data * self.active_layer.mix_factor
-            start = 0
-        else:
-            raise EditError(f"Unknown export scope {scope!r}")
+        data = self.export_source(scope, layer_ids)
         if time_range_s is not None:
-            a = max(0, int(round(time_range_s[0] * self.sample_rate)) - start)
-            b = min(data.shape[1], int(round(time_range_s[1] * self.sample_rate)) - start)
+            a = max(0, int(round(time_range_s[0] * self.sample_rate)))
+            b = min(data.shape[1], int(round(time_range_s[1] * self.sample_rate)))
             if b <= a:
                 raise EditError("Export time range is empty")
-            data = data[:, a:b]
+            data = data.range(a, b)
         return export_audio(data, self.sample_rate, path, settings, protected_paths=self.protected_paths())
+
+    def export_source(self, scope: str = "mix", layer_ids: list[str] | None = None) -> BlockAudio:
+        """What an export of ``scope`` writes, as float64 audio rendered block by block when it is read
+        (the whole mix of a long project is never held at once). Same samples as before: the mix
+        (:meth:`Project.render_mix`), the given layers at their gains, or the selected component of
+        the active layer at its gain (silence elsewhere)."""
+        p = self.project
+        if scope == "mix":
+            return p.mix_view()
+        if scope == "layers":
+            if not layer_ids:
+                raise EditError("Choose at least one layer to export")
+            return p.mix_view(layers=[p.layer(i) for i in layer_ids])
+        if scope == "selection":
+            comp, f = self.component(), self.active_layer.mix_factor
+
+            def render(a: int, b: int) -> np.ndarray:
+                out = np.zeros((p.channels, max(0, b - a)))
+                lo, hi = max(a, comp.start), min(b, comp.end)
+                if hi > lo:
+                    out[:, lo - a : hi - a] = comp.data[:, lo - comp.start : hi - comp.start] * f
+                return out
+
+            return BlockAudio(p.channels, p.n_frames, render)
+        raise EditError(f"Unknown export scope {scope!r}")
 
 
 def _patches_of(cmd: Command):

@@ -273,7 +273,7 @@ def _load_areas(zf: zipfile.ZipFile, items, s, dtype) -> None:
                 raise ProjectFormatError("adjusted area component contains non-finite samples")
             sel = Selection.from_dict(it["selection"])
             out.append(AdjustArea(aid, int(it.get("number", len(out) + 1)), lid, sel, g, start, length, chans,
-                                  s.history.store.put(comp), float(it.get("created", 0.0))))
+                                  s.history.store.put(comp, hot=True), float(it.get("created", 0.0))))
         except ProjectFormatError:
             raise
         except (KeyError, ValueError, TypeError) as e:

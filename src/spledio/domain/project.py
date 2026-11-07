@@ -20,6 +20,8 @@ import numpy as np
 
 from spledio.dsp.stft import DEFAULT_EDIT_CONFIG, STFTConfig
 
+MIX_BLOCK = 1 << 18  # frames per block when a mix is rendered block by block
+
 LAYER_COLORS = ("#4fb3ff", "#ff9f43", "#7bd88f", "#e86fd8", "#ffd166", "#5ce1e6", "#ff6b6b", "#b39ddb")
 
 
@@ -151,22 +153,89 @@ class Project:
         return self.sample_rate / 2.0
 
     # ----- rendering ----------------------------------------------------------
+    def _mix_sources(self, layers: list[Layer] | None) -> list[tuple[np.ndarray, float]]:
+        return [(l.audio, l.mix_factor) for l in (self.audible_layers() if layers is None else layers)]
+
     def render_mix(
         self, start: int = 0, end: int | None = None, layers: list[Layer] | None = None, dtype=np.float64
     ) -> np.ndarray:
-        """Audible mix (or the given layers, honouring their gain/polarity) for ``[start, end)``."""
+        """Audible mix (or the given layers, honouring their gain/polarity) for ``[start, end)``.
+
+        Summed in float64. For another ``dtype`` the mix is summed and rounded block by block,
+        so no float64 copy of the whole range is made (the same values: the mix is per sample)."""
         end = self.n_frames if end is None else end
         start, end = max(0, start), min(self.n_frames, end)
-        out = np.zeros((self.channels, max(0, end - start)), dtype=np.float64)
-        for l in self.audible_layers() if layers is None else layers:
-            f = l.mix_factor
-            if f == 0.0:
-                continue
-            if f == 1.0:
-                out += l.audio[:, start:end]
-            else:
-                out += f * l.audio[:, start:end].astype(np.float64)
-        return out.astype(dtype, copy=False)
+        sources = self._mix_sources(layers)
+        dtype = np.dtype(dtype)
+        if dtype == np.float64:
+            return _mix_block(sources, self.channels, start, end)
+        out = np.empty((self.channels, max(0, end - start)), dtype=dtype)
+        for a in range(start, end, MIX_BLOCK):
+            b = min(end, a + MIX_BLOCK)
+            out[:, a - start : b - start] = _mix_block(sources, self.channels, a, b)
+        return out
+
+    def mix_view(self, start: int = 0, end: int | None = None, layers: list[Layer] | None = None) -> "BlockAudio":
+        """The same float64 mix as :meth:`render_mix`, rendered only block by block as it is read
+        (for export and peak measurement of long projects). The layers and their gains are taken
+        now; layer audio is read when a block is rendered."""
+        end = self.n_frames if end is None else end
+        start, end = max(0, start), min(self.n_frames, end)
+        sources, ch = self._mix_sources(layers), self.channels
+        return BlockAudio(ch, end - start, lambda a, b: _mix_block(sources, ch, start + a, start + b))
 
     def layer_is_identity_of_asset(self) -> bool:
         return len(self.layers) == 1 and self.layers[0].mix_factor == 1.0 and not self.layers[0].mute
+
+
+def _mix_block(sources: list[tuple[np.ndarray, float]], channels: int, start: int, end: int) -> np.ndarray:
+    """float64 sum of ``audio * factor`` over ``[start, end)`` (the one mix rule; see module docstring)."""
+    out = np.zeros((channels, max(0, end - start)), dtype=np.float64)
+    for audio, f in sources:
+        if f == 0.0:
+            continue
+        if f == 1.0:
+            out += audio[:, start:end]
+        else:
+            out += f * audio[:, start:end].astype(np.float64)
+    return out
+
+
+class BlockAudio:
+    """A read-only ``(channels, frames)`` float64 signal that is rendered on demand.
+
+    ``x[:, a:b]`` (and ``x[c]``, ``x[c, a:b]``) render just that part and return an ndarray;
+    :meth:`range` gives a sub-view without rendering anything; ``np.asarray(x)`` renders it all.
+    The export code reads it block by block, so a long mix is never held whole."""
+
+    ndim = 2
+    dtype = np.dtype(np.float64)
+    renders_blocks = True  # marker for export: slice it in blocks instead of converting it whole
+
+    def __init__(self, channels: int, frames: int, render, offset: int = 0):
+        self.shape = (int(channels), max(0, int(frames)))
+        self._render, self._offset = render, int(offset)
+
+    def range(self, a: int, b: int) -> "BlockAudio":
+        a, b = max(0, min(a, self.shape[1])), max(0, min(b, self.shape[1]))
+        return BlockAudio(self.shape[0], max(0, b - a), self._render, self._offset + a)
+
+    def _block(self, a: int, b: int) -> np.ndarray:
+        return self._render(self._offset + a, self._offset + max(a, b))
+
+    def __getitem__(self, key):
+        if not isinstance(key, tuple):
+            key = (key,)
+        rows = key[0]
+        cols = key[1] if len(key) > 1 else slice(None)
+        if len(key) > 2 or not isinstance(cols, slice) or cols.step not in (None, 1):
+            raise IndexError("BlockAudio supports [rows] and [rows, a:b] only")
+        a, b, _ = cols.indices(self.shape[1])
+        return self._block(a, b)[rows]
+
+    def __array__(self, dtype=None, copy=None):
+        out = self._block(0, self.shape[1])
+        return out if dtype is None else out.astype(dtype, copy=False)
+
+    def __len__(self) -> int:
+        return self.shape[0]

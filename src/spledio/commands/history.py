@@ -28,14 +28,21 @@ from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
+from spledio.ram import undo_ram_budget
+
 if TYPE_CHECKING:  # pragma: no cover
     from spledio.domain.project import Layer, Project
 
 
 class PatchStore:
-    def __init__(self, ram_budget_bytes: int = 768 * 2**20, directory: str | None = None):
-        self._budget = ram_budget_bytes
+    """Arrays by handle: in RAM up to a byte budget (default: sized to this machine's RAM, see
+    :func:`spledio.ram.undo_ram_budget`), older ones spilled to disk. ``hot`` arrays (adjusted-area
+    components, read on every change of their area) move to disk only after everything else."""
+
+    def __init__(self, ram_budget_bytes: int | None = None, directory: str | None = None):
+        self._budget = int(undo_ram_budget() if ram_budget_bytes is None else ram_budget_bytes)
         self._ram: OrderedDict[int, np.ndarray] = OrderedDict()
+        self._hot: set[int] = set()
         self._disk: dict[int, str] = {}
         self._bytes = 0
         self._ids = itertools.count(1)
@@ -49,12 +56,14 @@ class PatchStore:
             self._dir = tempfile.mkdtemp(prefix="spledio-patches-")
         return self._dir
 
-    def put(self, arr: np.ndarray) -> int:
+    def put(self, arr: np.ndarray, hot: bool = False) -> int:
         a = np.ascontiguousarray(arr)
         a.setflags(write=False)
         with self._lock:
             h = next(self._ids)
             self._ram[h] = a
+            if hot:
+                self._hot.add(h)
             self._bytes += a.nbytes
             self._spill_locked()
         return h
@@ -71,6 +80,7 @@ class PatchStore:
 
     def release(self, h: int) -> None:
         with self._lock:
+            self._hot.discard(h)
             a = self._ram.pop(h, None)
             if a is not None:
                 self._bytes -= a.nbytes
@@ -83,9 +93,14 @@ class PatchStore:
 
     def _spill_locked(self) -> None:
         while self._bytes > self._budget and len(self._ram) > 1:
-            h, a = self._ram.popitem(last=False)
+            newest = next(reversed(self._ram))  # always stays in RAM
+            h = next((k for k in self._ram if k not in self._hot and k != newest), None)
+            if h is None:  # only hot arrays left besides the newest: oldest first
+                h = next(iter(self._ram))
+            a = self._ram[h]
             path = os.path.join(self.directory, f"p{h}.npy")
-            np.save(path, a, allow_pickle=False)
+            np.save(path, a, allow_pickle=False)  # only then leave RAM: a failed write loses nothing
+            del self._ram[h]
             self._disk[h] = path
             self._bytes -= a.nbytes
 
@@ -100,6 +115,7 @@ class PatchStore:
     def close(self) -> None:
         with self._lock:
             self._ram.clear()
+            self._hot.clear()
             self._disk.clear()
             self._bytes = 0
         if self._owns_dir and self._dir is not None:
