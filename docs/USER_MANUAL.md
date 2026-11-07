@@ -120,7 +120,7 @@ Quick repeated clicks on the same area count as **one** undo step.
 | **S** | Only the selected sound, so you can check you boxed the right thing |
 | **Shift+S** | The selected time with all pitches |
 | **R** | Everything *except* the selection |
-| **D** | Exactly what an edit removes (the difference) |
+| **D** | Exactly what the last edit removed (the difference), including a level change on an area |
 | **L** | Loop the selection |
 | **Home** | Back to the start |
 
@@ -142,7 +142,9 @@ For careful work, the **Reduce Selected Sound** panel offers a preview workflow:
 
 1. Set an amount, for example −12 dB.
 2. **Preview (P)** plays the result without applying it.
-3. **Bypass (B)** or **A/B (A)** switch between original and preview while playing.
+3. **Bypass (B)** or **A/B (A)** switch between original and preview while playing. Without a preview,
+   **A/B** compares the last edit, an area turned up or down with ↑/↓ included. After a time edit
+   (delete, crop, insert) there is nothing older to compare until you edit again.
 4. **Apply** (⌘Return) applies it as one undo step, or **Cancel** discards the preview.
 
 Other tools, all undoable:

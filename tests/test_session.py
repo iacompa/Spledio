@@ -201,6 +201,49 @@ def test_difference_signal_is_original_minus_processed(session):
     np.testing.assert_allclose(d2.data, d.data, atol=1e-6)
 
 
+def test_ab_and_difference_compare_the_last_adjusted_area_change(session):
+    """↑/↓ on an area is an edit like any other: A/B and Difference must compare it. They only
+    looked at plain gain edits, so after an area change they said "No edit to compare" (or played
+    an older, unrelated edit)."""
+    s = session
+    s.set_selection(Selection.of(RectShape(0.5, 2.5, 2300, 2700)))
+    mix0 = s.project.render_mix()
+    s.adjust_area(target_db=-12.0)
+    mix1 = s.project.render_mix()
+    start, a, b, label = s.ab_regions()
+    assert "Area 1" in label
+    n = a.shape[1]
+    assert np.max(np.abs(a - mix0[:, start : start + n])) < 1e-6
+    assert np.max(np.abs(b - mix1[:, start : start + n])) < 1e-6
+    d = s.difference_buffer()
+    assert d.start == start and "Area 1" in d.label
+    assert np.max(np.abs(d.data - (mix0 - mix1)[:, start : start + n])) < 1e-6
+
+
+def test_ab_and_difference_refuse_edits_that_no_longer_line_up(session):
+    """After a time edit (or once the edited layer is gone) an older patch no longer matches the
+    audio: A/B used to crash with a shape error or a KeyError instead of saying there is nothing
+    to compare."""
+    s = session
+    s.set_selection(Selection.of(RectShape(1.5, 2.5, 2300, 2700)))
+    s.apply_gain(-6.0)
+    s.set_selection(Selection.of(time_range(0.0, 1.0)))
+    s.crop_time()
+    for fn in (s.ab_regions, s.difference_buffer):
+        with pytest.raises(EditError):
+            fn()
+    s.undo()
+    s.add_empty_layer()
+    s.set_active_layer(s.project.layers[0].id)
+    s.set_selection(Selection.of(RectShape(1.5, 2.5, 2300, 2700)))
+    s.apply_gain(-6.0)
+    s.delete_layer(s.project.layers[0].id)
+    for fn in (s.ab_regions, s.difference_buffer):
+        with pytest.raises(EditError):
+            fn()
+
+
+
 # ---------------------------------------------------------------- 18. clipping
 def test_boost_triggers_clipping_warning_and_float_export_not_clipped(session, tmp_path):
     from spledio.audio.export import ClippingError

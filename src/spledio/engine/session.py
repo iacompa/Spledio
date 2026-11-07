@@ -923,15 +923,26 @@ class EditorSession:
             layer = self.project.layer(pv.layer_id)
             return AuditionBuffer(pv.start, self._f32((pv.original - pv.processed) * layer.mix_factor),
                                   f"Removed by preview: {pv.label}")
+        cmd, p = self._last_patch()
+        layer = self.project.layer(p.layer_id)
+        before = self.history.store.get(p.before).astype(np.float64)
+        after = self.history.store.get(p.after).astype(np.float64)
+        return AuditionBuffer(p.start, self._f32((before - after) * layer.mix_factor), f"Removed by: {cmd.label}")
+
+    def _last_patch(self) -> tuple[Command, LayerPatch]:
+        """The most recent audio edit that can still be compared (A/B, Difference).
+
+        Gain edits, brush strokes, extractions and adjusted-area changes count. A time edit
+        (delete / crop / insert) moves the audio, so no older patch lines up any more; neither
+        does a patch on a layer that has been deleted since."""
         for cmd in reversed(self.history.undo_stack):
+            if _moves_timeline(cmd):
+                break
             patches = _patches_of(cmd)
             if patches:
-                p = patches[0]
-                layer = self.project.layer(p.layer_id) if self.project.has_layer(p.layer_id) else None
-                f = layer.mix_factor if layer else 1.0
-                before = self.history.store.get(p.before).astype(np.float64)
-                after = self.history.store.get(p.after).astype(np.float64)
-                return AuditionBuffer(p.start, self._f32((before - after) * f), f"Removed by: {cmd.label}")
+                if not self.project.has_layer(patches[0].layer_id):
+                    break
+                return cmd, patches[0]
         raise EditError("No edit to compare: apply or preview an edit first")
 
     def ab_regions(self) -> tuple[int, np.ndarray, np.ndarray, str]:
@@ -944,15 +955,11 @@ class EditorSession:
             a = self.mix_with_override(layer, pv.start, pv.original)
             b = self.mix_with_override(layer, pv.start, pv.processed)
             return pv.start, a, b, pv.label
-        for cmd in reversed(self.history.undo_stack):
-            patches = _patches_of(cmd)
-            if patches:
-                p = patches[0]
-                layer = self.project.layer(p.layer_id)
-                a = self.mix_with_override(layer, p.start, self.history.store.get(p.before))
-                b = self.project.render_mix(p.start, p.end, dtype=np.float32)
-                return p.start, a, b, cmd.label
-        raise EditError("No edit to compare: apply or preview an edit first")
+        cmd, p = self._last_patch()
+        layer = self.project.layer(p.layer_id)
+        a = self.mix_with_override(layer, p.start, self.history.store.get(p.before))
+        b = self.project.render_mix(p.start, p.end, dtype=np.float32)
+        return p.start, a, b, cmd.label
 
     def mix_with_override(self, layer: Layer, start: int, data: np.ndarray) -> np.ndarray:
         n = data.shape[1]
@@ -1015,12 +1022,20 @@ class EditorSession:
 def _patches_of(cmd: Command):
     if isinstance(cmd, PatchCommand):
         return cmd.patches
+    if isinstance(cmd, AreaCommand):
+        return [cmd.patch]
     if isinstance(cmd, CompositeCommand):
         out = []
         for c in cmd.children:
             out.extend(_patches_of(c))
         return out
     return []
+
+
+def _moves_timeline(cmd: Command) -> bool:
+    if isinstance(cmd, TimelineCommand):
+        return True
+    return isinstance(cmd, CompositeCommand) and any(_moves_timeline(c) for c in cmd.children)
 
 
 __all__ = ["EditorSession", "EditError", "SessionEvent", "EditResult", "EditPreview", "AuditionBuffer"]
