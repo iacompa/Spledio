@@ -49,14 +49,14 @@ the GPL requires (see below).
       certificate. Without them macOS blocks the downloaded app. See [RELEASE_MACOS.md](RELEASE_MACOS.md).
 - [x] **First unsigned local build** with `scripts/release_macos.sh`: `.app` and `.dmg` built and passed the
       smoke test (2026-11-07; see [RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07)).
-- [ ] **Build with a python.org Python.** The Homebrew Python on the development Mac limits the app to
-      macOS 26 or later.
+- [x] **Build with the python.org Python** (`scripts/get_build_python.sh`, nothing to install). The app
+      now runs on macOS 15 or later.
 - [ ] **Add the missing license texts** to the bundle (list in `THIRD_PARTY_NOTICES.md`, "Gaps to close").
 - [ ] **First signed and notarized build**, made with `scripts/release_macos.sh`.
 - [ ] **Test the DMG on a clean Mac** (or a new user account): download from the release URL, open, edit,
       play, export, save and reopen.
-- [ ] **Fill in the minimum macOS version** in the release notes. It depends on the Python used to build
-      (see [PACKAGING.md](PACKAGING.md)) and is not known yet.
+- [x] **Minimum macOS: 15.0** (Sequoia). The release script reads it from the app's binaries and prints
+      it; it is on the page and in the user manual. Put it in each release's notes.
 - [ ] **Publish the GitHub release** (tag `v0.1.0`) with the DMG, its `.sha256` file and release notes.
 - [ ] Put `website/spledio/` on the site and click every link once.
 

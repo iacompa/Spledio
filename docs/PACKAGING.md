@@ -22,12 +22,13 @@
   `resources/icons/app/png/icon_*.png` and falls back to the SVG master only
   if those are missing. Keep the PNGs in the bundle (`--collect-data
   spledio`) so the SVG plugins and QtSvg are not needed.
-- **The Homebrew interpreter limits the target OS.** The verified CPython
-  3.14.7 is a Homebrew build whose `Python` binary has `minos 26.0`, so a
-  bundle frozen from it would need macOS 26 or later. The wheels set lower
-  floors: PySide6 `macosx_13_0`, numpy/scipy `macosx_14_0_arm64`,
-  soundfile `macosx_11_0`. For a macOS 14+ arm64 build, freeze with a
-  python.org CPython. This is **not verified**.
+- **The Homebrew interpreter limits the target OS.** The development
+  CPython 3.14.7 is a Homebrew build whose `Python` binary has `minos 26.0`,
+  so a bundle frozen from it needs macOS 26 or later (verified). Releases are
+  frozen with the python.org CPython instead (`scripts/get_build_python.sh`,
+  no install needed), which gives **macOS 15.0**: PySide6 6.11.3's Python
+  modules need 15.0 although its wheel is tagged `macosx_13_0`; numpy/scipy
+  need 14.0 (verified 2026-11-07).
 - **numpy/scipy are arm64-only here.** Build an arm64 `.app`. A universal2
   or x86_64 build needs x86_64 wheels and a separate build (untested).
 - **Signatures.** All bundled native libraries in the wheels are ad-hoc
@@ -52,7 +53,7 @@ pins as `requirements.txt`.
 
 ```sh
 cd "/path/to/Spledio"
-/Library/Frameworks/Python.framework/Versions/3.14/bin/python3.14 -m venv .venv-build   # python.org build (not verified)
+"$(scripts/get_build_python.sh)" -m venv .venv-build   # python.org CPython, unpacked (verified)
 .venv-build/bin/python -m pip install -r requirements.txt
 .venv-build/bin/python -m pip install -r requirements-packaging.txt            # exact PyInstaller pins
 .venv-build/bin/python -m pip install . --no-deps

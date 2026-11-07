@@ -61,10 +61,11 @@ Honest list of what is missing, rough, or only partly verified. See
 | Platform | Status |
 |---|---|
 | macOS 27 (Apple Silicon), CPython 3.14.7 | Tested: full test suite, app launched and used (see [TESTING.md](TESTING.md)) |
-| macOS Intel, older macOS | Not tested |
+| macOS 15–26 (Apple Silicon) | The packaged app declares macOS 15.0 as its minimum; **not tested** on those versions yet |
+| Intel Macs | Not supported by the packaged app (Apple Silicon only); running from source there is not tested |
 | Windows | Setup/run `.bat` scripts written, **not tested** |
 | Linux | Expected to work (pure Python + wheels with bundled libsndfile/PortAudio); **not tested** |
-| macOS `.app`/`.dmg` | **Unsigned local test build works** (built and smoke-tested 2026-11-07). Not yet signed with a Developer ID, notarized, or built to run on macOS older than 26. See [RELEASE_MACOS.md](RELEASE_MACOS.md). |
+| macOS `.app`/`.dmg` | **Local test build works** for macOS 15+ (built and smoke-tested 2026-11-07). Not yet signed with a Developer ID or notarized, so other Macs block it. See [RELEASE_MACOS.md](RELEASE_MACOS.md). |
 | Windows/Linux installers (.exe/.msi, AppImage) | **Not built yet**. See [PACKAGING.md](PACKAGING.md). |
 
 ## Accessibility

@@ -107,16 +107,22 @@ RELEASE_MACOS.md). Results:
 | app copied out of the mounted `Spledio-macOS-arm64.dmg` | `codesign --verify --deep --strict` valid; smoke test **PASSED**, all 9 |
 | normal launch with a file, no test flags | main window opened with the file, spectrogram and all panels (screenshot taken); nothing printed to stderr |
 
-Limits of this build: it runs only on **macOS 26 or later**, because the Homebrew Python it was frozen
+Limits of that first build: it ran only on **macOS 26 or later**, because the Homebrew Python it was frozen
 from targets macOS 26. It is ad-hoc signed, so Gatekeeper rejects it (`spctl -a -t exec`: "rejected");
 only a notarized build passes Gatekeeper.
+
+**Rebuilt with the python.org Python 3.14.10** (`PYTHON="$(scripts/get_build_python.sh)" UNSIGNED=1
+scripts/release_macos.sh`): 418 passed, 1 skipped; minimum macOS **15.0**; smoke test **PASSED** before
+and after signing and from a copy taken out of the DMG; normal launch opened the main window. A scan of all
+187 binaries found no link to anything outside the app or macOS, and no path from the build Mac.
 
 ## Not tested
 
 * Windows and Linux: no installers built, and the `.bat`/`.sh` setup scripts have not been run there.
 * A **Developer ID signed and notarized** build, and Gatekeeper on a downloaded DMG. Only the unsigned
   (ad-hoc) build above was made; it needs an Apple Developer membership.
-* The packaged app on **another Mac** or on macOS older than 26. This build cannot run there; see above.
+* The packaged app on **another Mac**, and on macOS 15–26. The app declares macOS 15.0 as its minimum,
+  but it has only been run on this Mac (macOS 27).
 * **Audible** playback inside the packaged app. The smoke test runs the real output stream with silence;
   audible playback was tested from source (see above).
 * The website page `website/spledio/index.html`: layout previewed in a browser; links point to the GitHub repository, which is still private.

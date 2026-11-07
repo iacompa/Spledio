@@ -20,8 +20,8 @@ It is free and open source under the **GNU General Public License v3.0 only (GPL
 2. Open the downloaded file and drag **Spledio** into **Applications**.
 3. Open Spledio from Applications. The app is signed and notarized by Apple, so it opens like any other app.
 
-Requirements: a Mac with Apple Silicon (M1 or newer). The minimum macOS version is listed on the
-download page for each release.
+Requirements: a Mac with Apple Silicon (M1 or newer) running **macOS 15 Sequoia or later**. You don't
+need to install anything else: everything Spledio needs is inside the app.
 
 ### Windows and Linux
 

@@ -4,14 +4,17 @@
 #   UNSIGNED=1 has been run end to end (2026-11-07, see docs/RELEASE_MACOS.md).
 #   A Developer ID signing + notarization run has NOT been done yet.
 #
+# PYTHON must be a python.org CPython (an app frozen from Homebrew's Python needs macOS 26+).
+# scripts/get_build_python.sh unpacks the official one into a private folder; nothing is installed.
+#
 # Signed + notarized release (needs a Developer ID; see docs/RELEASE_MACOS.md):
 #   SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 #   NOTARY_PROFILE=spledio-notary \
-#   PYTHON=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3.14 \
+#   PYTHON="$(scripts/get_build_python.sh)" \
 #   scripts/release_macos.sh
 #
 # Local test build (ad-hoc signed, NOT notarized, only runs on this Mac):
-#   UNSIGNED=1 scripts/release_macos.sh
+#   PYTHON="$(scripts/get_build_python.sh)" UNSIGNED=1 scripts/release_macos.sh
 #
 # Output: dist/Spledio-macOS-arm64.dmg and dist/Spledio-macOS-arm64.dmg.sha256
 set -euo pipefail

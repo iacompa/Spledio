@@ -10,7 +10,7 @@ Where to pick up development. Read [ARCHITECTURE.md](ARCHITECTURE.md) first.
 | **M2 – layers & precision** (extract/copy to layer, layer mixer, brushes, feather, compound selections, resonance finder, delete/crop/insert time, autosave/recovery, portable projects, adjusted areas with ↑/↓ keys) | **Mostly done**. Missing: moving selected content, harmonic selection, markers UI, persistent undo. |
 | **M3 – AI separation** | Not started. Adapter slot is `src/spledio/models/`. |
 | **M4 – repair suite** (heal, de-click, de-hum, noise profile) | Not started. Contract for modules below. |
-| **M5 – packaging** | **Started.** macOS: `scripts/release_macos.sh` builds an unsigned `.app`/`.dmg` that passes `--smoke-test` (2026-11-07). Still to do: build with a python.org Python (Homebrew's limits it to macOS 26+), Developer ID signing, notarization, the missing license texts, and a test on a second Mac. See [RELEASE_MACOS.md](RELEASE_MACOS.md). Windows/Linux not started. |
+| **M5 – packaging** | **Mostly done for macOS.** `scripts/release_macos.sh` builds a macOS 15+ `.app`/`.dmg` with the python.org Python (`scripts/get_build_python.sh`) that passes `--smoke-test` (2026-11-07). Still to do: Developer ID signing + notarization (needs the Apple membership), the missing license texts, and a test on a second Mac. See [RELEASE_MACOS.md](RELEASE_MACOS.md). Windows/Linux not started. |
 
 ## Invariants you must keep
 
@@ -64,10 +64,9 @@ that check: preview == commit == export, cancel leaves audio untouched, undo res
 
 ## Suggested next tasks (in order)
 
-1. **Finish the macOS release**: the unsigned build works. Next: install a python.org Python 3.14 and build with
-   it, add the missing license texts, then do the signed and notarized run with a Developer ID
-   ([RELEASE_MACOS.md](RELEASE_MACOS.md)) and test on a clean machine. The website launch waits on this
-   ([WEBSITE_PLAN.md](WEBSITE_PLAN.md)).
+1. **Finish the macOS release**: the macOS 15+ build works. Next: add the missing license texts, then do the
+   signed and notarized run with a Developer ID ([RELEASE_MACOS.md](RELEASE_MACOS.md)) and test on a clean
+   machine running macOS 15. The website launch waits on this ([WEBSITE_PLAN.md](WEBSITE_PLAN.md)).
 2. **Output device picker** (the backend already accepts a `device`; there is no UI yet).
 3. **Run and fix on Windows and Linux** (the `.bat` scripts are untested).
 4. **Move selected content** in time/frequency (Transform tool with audio): extract → shift → re-add, as one composite command.

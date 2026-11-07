@@ -1,11 +1,11 @@
 # Releasing Spledio for macOS: signed, notarized, downloadable
 
-> **Status (2026-11-07):** the **unsigned local test build works**. `UNSIGNED=1 scripts/release_macos.sh`
-> ran end to end on this Mac and produced a `.app` and `.dmg` that pass the built-in smoke test. See
-> [First local build](#first-local-build-2026-11-07) below.
-> **Not done yet:** a Developer ID signature, notarization, stapling, a build that runs on macOS older
-> than 26, and a test on a second Mac. None of these can be done without the Apple membership and a
-> python.org Python (steps 1–5 below).
+> **Status (2026-11-07):** the **local test build works and targets macOS 15 or later** (Apple Silicon).
+> `scripts/release_macos.sh` builds it with the official python.org Python (fetched by
+> `scripts/get_build_python.sh`, nothing installed) and produces a `.app` and `.dmg` that pass the built-in
+> smoke test. See [First local build](#first-local-build-2026-11-07) below.
+> **Not done yet:** the Developer ID signature, notarization and stapling (they need the Apple Developer
+> membership, steps 1–3 below), and a test on a second Mac, ideally one running macOS 15.
 
 Why this matters: macOS Gatekeeper blocks apps downloaded from the internet unless they are **signed with a
 Developer ID** and **notarized by Apple**. With both, users double-click and the app opens normally.
@@ -32,31 +32,36 @@ Developer ID** and **notarized by Apple**. With both, users double-click and the
    (`APP_ID` in `src/spledio/branding.py`). If you own a domain, use its reverse form, for example
    `com.yourdomain.spledio`. Changing it after release makes macOS treat it as a different app.
    Pass `BUNDLE_ID=...` to the script and update `branding.py` to match.
-5. **Install a python.org CPython 3.14** (macOS installer from python.org) to build with. The Homebrew Python
-   on the development Mac targets macOS 26+, so an app frozen from it would not run on older macOS.
-   See [PACKAGING.md](PACKAGING.md).
+5. **Nothing to install for Python.** Users never install Python: it is packed inside the app. The build
+   uses the official python.org CPython, which `scripts/get_build_python.sh` downloads (pinned version,
+   SHA-256 and the Python Software Foundation's Apple signature checked) and only *unpacks* into
+   `~/Library/Caches/spledio-build/`. No admin password, nothing installed system-wide. (Homebrew's
+   Python can't be used for a release: an app frozen from it only runs on macOS 26+.)
 
 ## Every release
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 NOTARY_PROFILE=spledio-notary \
-PYTHON=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3.14 \
+PYTHON="$(scripts/get_build_python.sh)" \
 scripts/release_macos.sh
 ```
 
 What the script does, in order:
 
-1. Creates or updates a separate build venv (`.venv-build`), installs the pinned requirements and PyInstaller,
-   and records `dist-build-freeze.txt`.
+1. Creates or updates a separate build venv (`.venv-build`; recreated automatically when `PYTHON` changes),
+   installs the pinned requirements and PyInstaller (`requirements-packaging.txt`), and records
+   `dist-build-freeze.txt`.
 2. Runs the test suite (set `SKIP_TESTS=1` to skip).
 3. Freezes `Spledio.app` with PyInstaller in **onedir** mode. Never use onefile: Qt and libsndfile must
    stay replaceable files under the LGPL.
 4. Sets the version in `Info.plist` and copies `LICENSE`, `THIRD_PARTY_NOTICES.md` and `licenses/` into the bundle.
 5. Removes Qt plugins Spledio never uses, then every Qt framework nothing links to any more
    (`scripts/prune_qt_bundle.py`; see below).
-6. Checks the bundle: no FFmpeg, WebEngine, Pdf or Multimedia; libsndfile and PortAudio present; `--version` runs;
-   then runs **`Spledio --smoke-test`** on a generated test file (see below). Any failure stops the script.
+6. Checks the bundle: no FFmpeg, WebEngine, Pdf or Multimedia; libsndfile and PortAudio present. Reads the
+   **minimum macOS** from every binary (`scripts/bundle_min_macos.py`) and writes it to `Info.plist`; a signed
+   build that would need macOS 26+ is refused. `--version` runs; then **`Spledio --smoke-test`** runs on a
+   generated test file (see below). Any failure stops the script.
 7. Signs everything inside-out with the hardened runtime and a secure timestamp (`packaging/entitlements.plist`),
    verifies with `codesign --verify --deep --strict`, and runs the smoke test **again on the signed app**.
 8. Builds `dist/Spledio-macOS-arm64.dmg` (app + Applications shortcut) and signs it.
@@ -98,7 +103,7 @@ and "Source code for this release: the tag `vX.Y.Z` in this repository (GPL-3.0-
 ## A local test build without a certificate
 
 ```bash
-UNSIGNED=1 scripts/release_macos.sh
+PYTHON="$(scripts/get_build_python.sh)" UNSIGNED=1 scripts/release_macos.sh
 ```
 
 This produces an ad-hoc signed DMG for checking the packaging on your own Mac. It is **not notarized**:
@@ -160,7 +165,20 @@ Apple Silicon Mac with macOS 27.0.1, PyInstaller 6.22.3 with pyinstaller-hooks-c
 | Launched through `open` (like a Finder double-click) | smoke test **PASSED**; a normal launch opened the main window with the file and its spectrogram |
 | App copied out of the mounted DMG | `codesign --verify --deep --strict` valid; smoke test **PASSED** |
 | Gatekeeper (`spctl -a -t exec`) | **rejected**, as expected for an ad-hoc signed app. Only a notarized build passes. |
-| Minimum macOS of this build | **26.0**, because the bundled Homebrew `Python.framework` has `minos 26.0` (the launcher itself says 11.0). A release must be built with a python.org Python (step 5 of the setup). |
+| Minimum macOS of this build | **26.0**, because the bundled Homebrew `Python.framework` has `minos 26.0` (the launcher itself says 11.0). Solved by the python.org build below. |
+
+**Rebuilt with the python.org Python (the way releases are built now):**
+`PYTHON="$(scripts/get_build_python.sh)" UNSIGNED=1 scripts/release_macos.sh`, 193 s including the tests.
+
+| | |
+|---|---|
+| Python inside the app | CPython **3.14.10** from python.org's official installer (`python-3.14.10-macos11.pkg`, SHA-256 and the Python Software Foundation's Developer ID signature checked, unpacked only). |
+| Tests | 418 passed, 1 skipped |
+| **Minimum macOS** | **15.0**, written to `LSMinimumSystemVersion`. Set by PySide6 6.11.3's Python modules (`QtCore.abi3.so`, `libpyside6`, `libshiboken6`, …: `minos 15.0`, although the wheel is tagged `macosx_13_0`). Qt itself needs 13.0, NumPy/SciPy 14.0, Python 11.0. |
+| `dist/Spledio.app` / DMG | 129 MB / 58 MB |
+| Interpreter libraries bundled | OpenSSL 3.5.9 (`libssl.3`, `libcrypto.3`), zstd 1.5.7 (`libzstd.1`); xz/liblzma and mpdecimal 4.0.1 are built into `_lzma` and `_decimal`. |
+| Links outside the app | **None**: all 187 binaries load only from inside the app or from macOS itself, and no absolute rpaths. No path from the build Mac (drive name, user folder, build cache) appears anywhere in the app. |
+| Smoke test | **PASSED** unsigned, ad-hoc signed (hardened runtime), and from a copy taken out of the DMG and launched with `open`; normal launch showed the main window. |
 
 ## Troubleshooting
 
