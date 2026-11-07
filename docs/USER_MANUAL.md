@@ -163,7 +163,8 @@ Other tools, all undoable:
 
 ## 8. Undo and history
 
-* **⌘Z** undoes and **⌘⇧Z** redoes. Up to 200 steps.
+* **⌘Z** undoes and **⌘⇧Z** redoes. Up to 200 steps. After more than 200 edits the oldest ones can no longer
+  be undone, and the project counts as changed until you save it, even after undoing everything that is left.
 * The **History** panel lists every step. Click one to jump back to it.
 
 ---

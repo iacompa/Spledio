@@ -69,6 +69,36 @@ def test_undo_redo_restores_exact_audio_and_structure(session):
     assert s.project.layers[1].mute and s.project.layers[1].gain_db == -3.0
 
 
+
+def test_project_stays_dirty_when_the_oldest_undo_step_was_dropped(session, tmp_path):
+    """The history keeps the last 200 steps. Once older steps are dropped, undoing everything left
+    no longer returns to the opened (or saved) state, so the project must stay "unsaved". It
+    reported clean, and closing it would not have asked to save."""
+    s = session
+    s.history.limit = 5
+    original = s.active_layer.audio.copy()
+    s.set_selection(Selection.of(RectShape(0.5, 2.5, 2300, 2700)))
+    for _ in range(7):
+        s.apply_gain(-1.0)
+    while s.undo():
+        pass
+    assert not np.array_equal(s.active_layer.audio, original)
+    assert s.dirty
+    # saved after the first step that is later dropped: undoing to the bottom IS the saved state
+    s2 = EditorSession.from_audio_file(make_wav(str(tmp_path / "b.wav")))
+    s2.history.limit = 3
+    s2.set_selection(Selection.of(RectShape(0.5, 2.5, 2300, 2700)))
+    s2.apply_gain(-1.0)
+    s2.save(str(tmp_path / "b.spledio"))
+    for _ in range(3):
+        s2.apply_gain(-1.0)
+    assert s2.dirty
+    while s2.undo():
+        pass
+    assert not s2.dirty
+    s2.close()
+
+
 def test_one_brush_stroke_is_one_undo_event(session):
     s = session
     n0 = len(s.history.undo_stack)

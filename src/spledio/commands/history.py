@@ -404,6 +404,11 @@ class History:
         while len(self.undo_stack) > self.limit:
             old = self.undo_stack.pop(0)
             old.release(self.store)
+            # The bottom of the stack is now the state *after* ``old``.
+            if self._saved_marker is old:
+                self._saved_marker = "empty"  # undoing everything returns to the saved state
+            elif isinstance(self._saved_marker, str) and self._saved_marker == "empty":
+                self._saved_marker = object()  # the saved state can no longer be reached
         self.applied_count += 1
 
     def execute(self, project, cmd: Command) -> Change:
