@@ -155,6 +155,7 @@ Apple Silicon Mac with macOS 27.0.1, PyInstaller 6.22.3 with pyinstaller-hooks-c
 
 | Problem | Fix |
 |---|---|
+| PyInstaller stopped with `Target module "distutils" already imported as ExcludedModule` (later run). | Exclude `cffi._shimmed_dist_utils` instead of `distutils`; see the license rebuild below. |
 | The bundle check failed: `QtPdf` was bundled. PyInstaller collects every image-format and input-method plugin; `imageformats/libqpdf` pulls in QtPdf, and the virtual-keyboard plugin pulls in QtVirtualKeyboard, QtQuick, QtQml and more. `generic/libqtuiotouchplugin` (TUIO touch input over UDP) pulls in QtNetwork. | `scripts/prune_qt_bundle.py` removes those plugins and the image formats Spledio never reads (JPEG, TIFF, WebP, GIF, …), then removes every Qt framework that no remaining binary links to (checked with `otool -L`). |
 | The signed app would not start: "different Team IDs" (ad-hoc + hardened runtime). | Library validation is turned off for `UNSIGNED=1` builds only (see above). |
 | Dock panels are imported by name at run time, so PyInstaller might miss them. | `--collect-submodules spledio`. The smoke test confirms that all 7 panels load. |
@@ -187,6 +188,20 @@ Apple Silicon Mac with macOS 27.0.1, PyInstaller 6.22.3 with pyinstaller-hooks-c
 | Interpreter libraries bundled | OpenSSL 3.5.9 (`libssl.3`, `libcrypto.3`), zstd 1.5.7 (`libzstd.1`); xz/liblzma and mpdecimal 4.0.1 are built into `_lzma` and `_decimal`. |
 | Links outside the app | **None**: all 187 binaries load only from inside the app or from macOS itself, and no absolute rpaths. No path from the build Mac (drive name, user folder, build cache) appears anywhere in the app. |
 | Smoke test | **PASSED** unsigned, ad-hoc signed (hardened runtime), and from a copy taken out of the DMG and launched with `open`; normal launch showed the main window. |
+
+**Rebuilt with every license text and the source archives** (commit `9ddfaa1`, same command, about 7 minutes
+including the tests and the first download of the LGPL sources):
+
+| | |
+|---|---|
+| Fix needed | `--exclude-module distutils` made PyInstaller's distutils hook fail (`Target module "distutils" already imported as ExcludedModule`). The script now excludes `cffi._shimmed_dist_utils`, the only module that pulled in setuptools/distutils (cffi uses it only to compile C code, which the app never does). |
+| Tests | 425 passed, 1 skipped |
+| Build tools in the app | **None**: no setuptools, `packaging`, `_distutils_hack` or `pkg_resources` in the archive (they were bundled before), checked by the script. |
+| `Contents/Resources/licenses/` | 64 files: `LICENSE`, `THIRD_PARTY_NOTICES.md` and everything in `licenses/` except the 10 development-only files. |
+| Minimum macOS / sizes | 15.0 / app 128 MB, DMG 57 MB (`hdiutil verify` valid, `.sha256` matches) |
+| Source archives | `dist/Spledio-0.1.0-source.tar.gz` (1.5 MB, `git archive` of `9ddfaa1`) and `dist/third-party-sources/` (11 archives, 81 MB, all SHA-256 pinned) |
+| Smoke test | **PASSED** unsigned and ad-hoc signed (all 9 checks) |
+| Replacing a library, as `licenses/SOURCE-AND-REPLACING-LIBRARIES.md` describes | On a copy of the app, `libsndfile_arm64.dylib` was replaced by a modified build (different install name and an extra load command). Without re-signing, macOS kills the app (exit 137, invalid code signature). After the three commands in the document (`codesign` the library, `codesign --force --deep --sign -` the app, `xattr -dr com.apple.quarantine`), `codesign --verify --deep --strict` passes and the smoke test **PASSED** with the replaced library. |
 
 ## Troubleshooting
 

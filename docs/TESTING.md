@@ -16,8 +16,10 @@ This page records only what was actually run. Nothing here is projected or assum
 .venv/bin/python -m pytest -q
 ```
 
-Result: **418 passed, 1 skipped in 28 s** (419 collected), run by `scripts/release_macos.sh` before the
-final packaged build. The time varies a lot with how busy the machine is: one run took 133 s, and one
+Result: **425 passed, 1 skipped in 45 s** (426 collected) on 2026-11-07, and again in the release script's
+run before the latest packaged build. The skipped test needs a real audio device
+(`SPLEDIO_AUDIO_TEST=1`). `tests/test_licenses.py` covers Help ▸ Licenses and Notices, the About box
+credits, the license texts the app must carry, and the checksum table in `THIRD_PARTY_NOTICES.md`. The time varies a lot with how busy the machine is: one run took 133 s, and one
 during heavy load took 412 s. That slow run exposed a real bug: quick level presses could become
 separate undo steps when rendering was slow. It is fixed, and a regression test was added
 (`test_merge_counts_from_the_press_not_from_when_rendering_finished`).
@@ -115,6 +117,12 @@ only a notarized build passes Gatekeeper.
 scripts/release_macos.sh`): 418 passed, 1 skipped; minimum macOS **15.0**; smoke test **PASSED** before
 and after signing and from a copy taken out of the DMG; normal launch opened the main window. A scan of all
 187 binaries found no link to anything outside the app or macOS, and no path from the build Mac.
+
+**Rebuilt with every license text** (commit `9ddfaa1`): 425 passed, 1 skipped; smoke test **PASSED** before and
+after signing; 64 license files in `Contents/Resources/licenses/`; setuptools and `packaging` no longer
+bundled. The library-replacement steps in `licenses/SOURCE-AND-REPLACING-LIBRARIES.md` were followed on a
+copy of the app with a modified `libsndfile_arm64.dylib`: smoke test **PASSED** (details in
+[RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07)).
 
 ## Not tested
 
