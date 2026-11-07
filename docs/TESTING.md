@@ -16,11 +16,13 @@ This page records only what was actually run. Nothing here is projected or assum
 .venv/bin/python -m pytest -q
 ```
 
-Result: **459 passed in 33 s** with `SPLEDIO_AUDIO_TEST=1` (the real audio device test included) on
+Result: **482 passed in 46 s** with `SPLEDIO_AUDIO_TEST=1` (the real audio device test included) on
 2026-11-07, after the fixes for selections at the file edges, extract levels, A/B after area changes,
 the save marker, saving after the source changed, project-file checks, playback of files with more
-channels than the output, and Delete/Crop Time with a feather. Without that variable the real-device
-test is skipped (458 passed, 1 skipped, 40 s). Before those fixes the same run gave 437 passed. `tests/test_licenses.py` covers Help ▸ Licenses and Notices, the About box
+channels than the output, Delete/Crop Time with a feather, dither only when samples need rounding,
+A/B of multi-part edits, the transfer brush at different layer levels, the selection after undoing a
+time edit, and the channel scope applied on the GUI thread. Without that variable the real-device
+test is skipped (481 passed, 1 skipped, 38 s). Before those fixes the same run gave 437 passed. `tests/test_licenses.py` covers Help ▸ Licenses and Notices, the About box
 credits, the license texts the app must carry, and the checksum table in `THIRD_PARTY_NOTICES.md`. The time varies a lot with how busy the machine is: one run took 133 s, and one
 during heavy load took 412 s. That slow run exposed a real bug: quick level presses could become
 separate undo steps when rendering was slow. It is fixed, and a regression test was added
@@ -33,17 +35,17 @@ real-app run below.
 | File | Tests | What it covers |
 |---|---:|---|
 | `test_audio_io.py` | 106 | import of every PCM/float subtype and container libsndfile offers, MP3 / Ogg Vorbis / Opus decoded whole and repeatably (libsndfile's MP3 decoder is wrong when read in pieces), an MP3 without length information refused instead of cut short, channel counts, metadata, errors |
-| `test_export.py` | 80 | WAV/FLAC subtypes, dither, clipping policies, SRC, overwrite protection, export == mix |
+| `test_export.py` | 84 | WAV/FLAC subtypes, dither (skipped when no sample needs rounding, so an unedited file at its own depth is bit-identical), clipping policies, SRC, overwrite protection, export == mix |
 | `test_core_dsp.py` | 78 | STFT perfect reconstruction, selective gain accuracy, untouched samples bit-identical, selections, feather, a selection that reaches the file start or end is edited right up to the edge, resonance finder (incl. a ring that lasts only part of the file) |
 | `test_playback.py` | 36 | transport, loop, audition modes, A/B, device loss, latency compensation (fake device) |
 | `test_ui_panels.py` | 28 | every dock panel builds, buttons map to registered actions |
 | `test_rendering.py` | 25 | tiled spectrogram, caching, colour maps, display never changes audio, edited tiles keep their previous image until recomputed (no blinking) |
-| `test_session.py` | 38 | save/reopen bit-exact, portable projects, relink with SHA-256, saving after the source file changed on disk, malicious archives rejected (incl. compressed members and undrawable selection shapes), autosave/recovery, unsaved mark kept after the oldest undo step is dropped, extract keeps the mix with layer gain / polarity / mute / solo, A/B and Difference after an area change, Delete/Crop Time use the drawn span, not the feather |
+| `test_session.py` | 52 | save/reopen bit-exact, portable projects, relink with SHA-256, saving after the source file changed on disk, malicious archives rejected (incl. compressed members and undrawable selection shapes), autosave/recovery, unsaved mark kept after the oldest undo step is dropped, extract keeps the mix with layer gain / polarity / mute / solo, A/B and Difference after an area change and over every part of a multi-part edit, the transfer brush keeps the mix at any layer level / polarity and refuses a move between an audible and a muted layer, Delete/Crop Time use the drawn span, not the feather, undoing a time edit brings back the selection |
 | `test_ui_canvas.py` | 20 | canvas tools, selection drawing, zoom/pan, crosshair |
 | `test_ui_modules.py` | 12 | Preview / Bypass / Apply / Cancel through the Edit panel, tutorials |
 | `test_areas.py` | 11 | adjusted areas: 1 dB / 6 dB step sequence, silence and back is exact, independent and overlapping areas, merge of rapid presses into one undo step (counted from the key press, so a slow render does not split them), locked layer, removed area refused, save/reopen, timeline freeze + undo |
 | `test_ui_areas.py` | 8 | real main window: ↑/↓/+/−/Shift/0 keys, click-to-pick, Delete removes, Show / Hide areas (bar under the spectrogram, Shift+H, Areas panel stay in step), level bar (− / + / slider / Silence / ✕, placement, no busy flash, actions not left disabled), zoom shortcuts, zoom buttons fully readable at 1440 and 1024 px and zooming, trackpad pinch |
-| `test_ui_workflow.py` | 10 | real main window, core resonance workflow end to end, a 3- and 6-channel file plays folded to a stereo output, every enabled action triggered once without error, `--smoke-test` mode passes and reports a refused file at once, an MP3 opened (File ▸ Open lists MP3/OGG/Opus), edited, saved and reopened, the time readout showing the new file's length at once, no leftover panel tab bars over the panels, always dark |
+| `test_ui_workflow.py` | 15 | real main window, core resonance workflow end to end, a 3- and 6-channel file plays folded to a stereo output, the Channels scope applied to the selection on the GUI thread (edit, preview, mute, audition, area), every enabled action triggered once without error, `--smoke-test` mode passes and reports a refused file at once, an MP3 opened (File ▸ Open lists MP3/OGG/Opus), edited, saved and reopened, the time readout showing the new file's length at once, no leftover panel tab bars over the panels, always dark |
 
 UI tests run headless (`QT_QPA_PLATFORM=offscreen`) against the real `MainWindow` with a fake audio device
 whose output buffer is pulled and measured.
