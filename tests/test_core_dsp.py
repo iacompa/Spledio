@@ -251,3 +251,46 @@ def test_resonance_ringing_for_part_of_a_long_range_is_found_with_its_span():
     assert top.persistence > 0.9
     steady = [c for c in cands if abs(c.frequency_hz - 440) < 10][0]
     assert steady.t_start < 0.1 and steady.t_end > 7.9
+
+
+def _rms_db(x):
+    return 20 * np.log10(np.sqrt(np.mean(np.asarray(x, dtype=np.float64) ** 2)) + 1e-20)
+
+
+@pytest.mark.parametrize("cfg", [STFTConfig(4096, 1024, "hann"), STFTConfig(4096, 512, "hann"),
+                                 STFTConfig(2048, 1024, "hann")], ids=lambda c: f"{c.n_fft}/{c.hop}")
+def test_selection_reaching_the_file_start_or_end_is_edited_up_to_the_edge(cfg):
+    """A box drawn from the very start (or to the very end) of the file must silence the first
+    (last) samples too. Frames centred outside the file also cover those samples; they used to be
+    left out of the mask, so ~20 ms at each end kept most of their level (the last 10 ms of a
+    -9 dBFS tone stayed at about -14 dBFS). What remains now (about -32 dBFS in the first and last
+    10 ms) is the onset splatter of the file edge outside the selected band, which any band
+    selection leaves at an abrupt onset."""
+    x = tone(1500.0, dur=2.0)[None, :]
+    n = x.shape[1]
+    for t0, t1, edge in ((0.0, 1.0, slice(0, 480)), (1.0, 2.0, slice(n - 480, n))):
+        sel = Selection.of(RectShape(t0, t1, 1000.0, 2000.0))
+        comp = selected_component(x, sel, cfg, SR)
+        y = apply_gain_to_region(x, comp, -math.inf)[0]
+        out = x[0].copy()
+        out[comp.start : comp.end] = y
+        assert _rms_db(out[edge]) < -30.0, (t0, t1, _rms_db(out[edge]))
+        keep = 3 * n // 4 if t0 == 0.0 else n // 4  # the other half is untouched
+        assert abs(_rms_db(out[keep - 2400 : keep + 2400]) - _rms_db(x[0, keep - 2400 : keep + 2400])) < 1e-6
+    # an inverted box silences everything outside it, the file edges included
+    sel = Selection.of(RectShape(0.5, 1.5, 5000.0, 6000.0)).inverted()
+    comp = selected_component(x, sel, cfg, SR)
+    out = x[0].copy()
+    out[comp.start : comp.end] = apply_gain_to_region(x, comp, -math.inf)[0]
+    assert _rms_db(out[:480]) < -100.0 and _rms_db(out[-480:]) < -100.0
+
+
+def test_selection_away_from_the_edges_is_unchanged_by_the_edge_rule():
+    """Clamping frame times to the file only changes frames centred outside it."""
+    cfg = STFTConfig(4096, 512, "hann")
+    x = tone(1500.0, dur=2.0)[None, :]
+    sel = Selection.of(RectShape(0.4, 1.6, 1000.0, 2000.0), feather_t=0.05, feather_f=100.0)
+    r = rasterize(sel, cfg, SR, x.shape[1])
+    t = (np.arange(r.k0, r.k1) * (cfg.hop / SR))[:, None]
+    f = (np.arange(r.b0, r.b1) * (SR / cfg.n_fft))[None, :]
+    assert np.array_equal(r.data, sel.evaluate(t, f))

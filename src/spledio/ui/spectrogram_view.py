@@ -357,7 +357,7 @@ def selection_overlay_values(sel: Selection, cfg, sample_rate: float, n_samples:
         return np.ascontiguousarray(vals, dtype=np.float32), "raster"
     uk, kinv = np.unique(k_cols[cols], return_inverse=True)
     ub, binv = np.unique(b_rows[rows], return_inverse=True)
-    vals = rasterize_on(sel, uk * (cfg.hop / sr), ub * (sr / cfg.n_fft))  # (len(uk), len(ub))
+    vals = rasterize_on(sel, np.clip(uk * (cfg.hop / sr), 0.0, n_samples / sr), ub * (sr / cfg.n_fft))  # (len(uk), len(ub))
     out[np.ix_(rows, cols)] = vals[np.ix_(kinv, binv)].T.astype(np.float32)
     return out, "lod"
 

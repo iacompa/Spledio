@@ -38,6 +38,10 @@ Honest list of what is missing, rough, or only partly verified. See
 * **Edges of an STFT edit spread by up to n_fft/2 samples** before/after the selected time
   (that is how a smooth spectral edit works). Use time feather to control it. Samples beyond that
   span are bit-identical. A full-band *time range* selection is applied in the sample domain and is exact.
+* **Selections at the start or end of the file** are applied right up to the first / last sample. Audio
+  that starts or stops abruptly at the file edge still leaves a short trace outside the selected band:
+  silencing a 1–2 kHz box over a −9 dBFS 1.5 kHz test tone that starts at the first sample leaves about
+  −32 dBFS in the first 10 ms and −60 dBFS by 40 ms (the edge itself is a broadband onset).
 * **Boosting can clip.** The app warns with the new peak after any boost, and export lets you choose
   refuse / reduce level / limit / hard-clip. 32-bit float export never clips.
 * **Whole-file in memory.** Each layer is held in RAM (float32 by default). A 60-minute stereo 48 kHz
