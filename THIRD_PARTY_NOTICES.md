@@ -14,7 +14,16 @@ each `*.dist-info/`, the bundled native-library folders, `otool -L` and
 `strings`. Anything that could not be read from a local file is marked
 **not verified**. License files under [`licenses/`](licenses/) are
 byte-for-byte copies of the files named in the "Source" column of the
-[checksum table](#license-file-sources-and-checksums).
+[checksum table](#license-file-sources-and-checksums), except the few marked
+there as converted, extracted or written for Spledio. Files added on 2026-11-07 for
+the packaged app were compared byte for byte with the upstream release archives or
+the tagged files in the upstream repositories.
+
+In the app, all of these files are in `Spledio.app/Contents/Resources/licenses/`
+and can be read with **Help ▸ Licenses and Notices**. The About box carries the
+credits that LAME, mpg123 and the FreeType License ask for. Where to get the
+source code of the LGPL libraries, and how to replace them, is in
+[`licenses/SOURCE-AND-REPLACING-LIBRARIES.md`](licenses/SOURCE-AND-REPLACING-LIBRARIES.md).
 
 No AI models are bundled or downloaded (see
 [`docs/MODEL_LICENSES.md`](docs/MODEL_LICENSES.md)). Spledio does not use
@@ -32,10 +41,10 @@ leave them out (see below).
 | License (SPDX header in shipped `.pyi`/`.py` files) | `LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only` |
 | License Spledio uses | **LGPL-3.0-only**. Spledio could also use GPL-3.0-only, which matches its own license. |
 | Copyright as shipped | `Copyright (C) 2022 The Qt Company Ltd.` (headers of `PySide6/*.pyi`, `shiboken6/__init__.py`) |
-| License file under `licenses/` | **None.** The wheels ship no license file: the dist-info folders have no `licenses/` and there is no LICENSE/COPYING anywhere under `PySide6/` or `shiboken6/`. The LGPL-3.0 text is not on this machine. **Gap:** add the LGPL-3.0 and GPL-3.0 texts from <https://www.gnu.org/licenses/> before distributing a bundle. |
+| License file under `licenses/` | [`licenses/LGPL-3.0.txt`](licenses/LGPL-3.0.txt) (from <https://www.gnu.org/licenses/lgpl-3.0.txt>). The LGPL-3.0 is a set of additional permissions on top of the GPL-3.0, whose text is Spledio's own [`LICENSE`](LICENSE) (identical to <https://www.gnu.org/licenses/gpl-3.0.txt>). The wheels themselves ship no license file: the dist-info folders have no `licenses/` and there is no LICENSE/COPYING anywhere under `PySide6/` or `shiboken6/`. |
 | Bundled native libraries | Qt 6.11.3 frameworks (`PySide6/Qt/lib/*.framework`, 155 entries), Qt plugins (`PySide6/Qt/plugins`), `libpyside6.abi3.6.11.dylib`, `libpyside6qml.abi3.6.11.dylib`, `shiboken6/libshiboken6.abi3.6.11.dylib`. Qt reports itself as a "shared (dynamic) release build". The Addons wheel also ships **FFmpeg n7.1.5** (`PySide6/Qt/lib/libavcodec.61`, `libavformat.61`, `libavutil.59`, `libswresample.5`, `libswscale.8`). Each reports `... license: LGPL version 2.1 or later`, and the configure string has no `--enable-gpl`/`--enable-nonfree`. Only `Qt/plugins/multimedia/libffmpegmediaplugin.dylib` uses them. Spledio does not import QtMultimedia, does not load them (checked with dyld), and must **not** bundle them. |
 | Qt modules Spledio loads | QtCore, QtGui, QtWidgets, plus QtDBus (QtGui links to it on macOS). See [`docs/DEPENDENCY_INVENTORY.md`](docs/DEPENDENCY_INVENTORY.md#qt--pyside6-lgpl-30-obligations-when-distributing-a-bundled-app). |
-| Third-party code inside Qt | QtGui contains libpng 1.6.59 (shipped strings: `Copyright (c) 2018-2026 Cosmin Truta`, `Copyright (c) 1998-2002,2004,2006-2018 Glenn Randers-Pehrson`), plus FreeType, HarfBuzz and md4c. QtCore contains PCRE2. The imageformats plugins contain libtiff, libwebp and libjpeg-turbo. **No license texts for these components ship in the wheel.** Qt lists them, with their licenses, on [Licenses Used in Qt](https://doc.qt.io/qt-6/licenses-used-in-qt.html), and since Qt 6.8 also as an SBOM. FreeType's FTL, for example, requires a credit in the documentation. **Gap:** collect these texts before distributing. |
+| Third-party code inside Qt | [`licenses/Qt-6.11.3-third-party-notices.md`](licenses/Qt-6.11.3-third-party-notices.md) lists every third-party component compiled into the Qt binaries that ship (QtCore, QtGui, QtDBus, QtSvg, the cocoa plugin) with version, SPDX license and copyright lines, from the `qt_attribution.json` files of qtbase and qtsvg at tag v6.11.3. Each component was checked against the binaries: for example FreeType 2.15.0, HarfBuzz 14.6.0, libpng 1.6.59, PCRE2 10.49, MD4C 0.6.0, double-conversion 3.4.0, TinyCBOR 7.0 and Unicode CLDR v48.2 were found in them. The file also lists what is *not* shipped and why: zlib (macOS's system zlib is used), libjpeg/libtiff/libwebp (plugins removed), libpsl (QtNetwork removed), SQLite, Vulkan and PCRE2's JIT. The 18 license texts it refers to are the unmodified `LICENSES/*.txt` files from qtbase/qtsvg v6.11.3 (`licenses/Qt-6.11.3-*.txt`). For dual-licensed parts, Spledio uses FTL for FreeType, AFL-2.1 for the libdbus-1 headers and CC0-1.0 for BLAKE2. The FreeType License requires a credit in the documentation; it is in the About box ("based in part on the work of the FreeType Team"). `libshiboken6` also contains code from Python 3.7.0 under the PSF License Agreement ([`licenses/PySide6-6.11.3-PSF-3.7.0.txt`](licenses/PySide6-6.11.3-PSF-3.7.0.txt), from pyside-setup v6.11.3). |
 
 ### numpy 2.4.6
 
@@ -91,16 +100,16 @@ Component license files that ship in `numpy-2.4.6.dist-info/licenses/` (the sour
 | Library | Version (from strings in the binary) | License | Copyright | License file |
 |---|---|---|---|---|
 | libsndfile | 1.2.2 (`sf.__libsndfile_version__`) | **LGPL-2.1**: `_soundfile_data/COPYING` is the LGPL 2.1 text. "Or later" comes from upstream source headers and is **not verified locally**. | Not in shipped files. [libsndfile-binaries](https://github.com/bastibe/libsndfile-binaries) README: Erik de Castro Lopo (**not verified locally**) | [`licenses/libsndfile-LGPL-2.1.txt`](licenses/libsndfile-LGPL-2.1.txt) |
-| libFLAC | 1.4.3 (`reference libFLAC 1.4.3 20230623`) | BSD-3-Clause per the libsndfile-binaries README. **Not verified locally:** no file shipped. | Josh Coalson, Xiph.Org Foundation (README) | **missing** |
-| libogg | present (`ogg_*` symbols); version not determined | BSD-3-Clause per README ("Ogg Vorbis"). **Not verified locally.** | Xiph.Org Foundation (README) | **missing** |
-| libvorbis / libvorbisenc | 1.3.7 (`Xiph.Org libVorbis 1.3.7`) | BSD-3-Clause per README. **Not verified locally.** | Xiph.Org Foundation (README) | **missing** |
-| libopus | 1.4 (`libopus 1.4`) | BSD-3-Clause per README. **Not verified locally.** | Xiph.Org Foundation, Broadcom, Microsoft (README) | **missing** |
-| libmpg123 (MP3 decode) | 1.32.3 (next to `src/libmpg123/` strings) | LGPL-2.1 per README. **Not verified locally.** | Michael Hipp and others (README) | LGPL-2.1 text: [`licenses/libsndfile-LGPL-2.1.txt`](licenses/libsndfile-LGPL-2.1.txt); upstream COPYING **missing** |
-| LAME (MP3 encode) | 3.100 (`LAME3.100`) | LGPL-2.0 per README (written "LGP v2"). The "or later" variant is **not verified locally**. | Mike Cheng, Mark Taylor, The LAME Project (README) | **missing** (LGPL-2.0 text not on this machine) |
+| libFLAC | 1.4.3 (`reference libFLAC 1.4.3 20230623`) | BSD-3-Clause (`COPYING.Xiph` at tag 1.4.3) | `Copyright (C) 2000-2009  Josh Coalson`, `Copyright (C) 2011-2023  Xiph.Org Foundation` | [`licenses/libFLAC-1.4.3-COPYING.Xiph.txt`](licenses/libFLAC-1.4.3-COPYING.Xiph.txt) |
+| libogg | 1.3.5. The binary has no version string; 1.3.5 is the version that libsndfile-binaries' `mac_build.sh` builds at commit `804500c4`, the recipe that also gives the FLAC 1.4.3 and Opus 1.4 found in the binary. | BSD-3-Clause (`COPYING`) | `Copyright (c) 2002, Xiph.org Foundation` | [`licenses/libogg-1.3.5-COPYING.txt`](licenses/libogg-1.3.5-COPYING.txt) |
+| libvorbis / libvorbisenc | 1.3.7 (`Xiph.Org libVorbis 1.3.7`) | BSD-3-Clause (`COPYING`) | `Copyright (c) 2002-2020 Xiph.org Foundation` | [`licenses/libvorbis-1.3.7-COPYING.txt`](licenses/libvorbis-1.3.7-COPYING.txt) |
+| libopus | 1.4 (`libopus 1.4`) | BSD-3-Clause (`COPYING`, with Opus' patent notes) | `Copyright 2001-2011 Xiph.Org, Skype Limited, Octasic, ...` (see file) | [`licenses/libopus-1.4-COPYING.txt`](licenses/libopus-1.4-COPYING.txt) |
+| libmpg123 (MP3 decode) | 1.32.3 (next to `src/libmpg123/` strings) | **LGPL-2.1** (`COPYING`: files without their own note are LGPL 2.1) | `Copyright (c) 1995-2020 by Michael Hipp and others` (the "main message" that `COPYING` asks to show in About boxes; it is in Spledio's About box) | [`licenses/mpg123-1.32.3-COPYING.txt`](licenses/mpg123-1.32.3-COPYING.txt), [`licenses/mpg123-1.32.3-AUTHORS.txt`](licenses/mpg123-1.32.3-AUTHORS.txt) |
+| LAME (MP3 encode) | 3.100 (`LAME3.100`) | **LGPL-2.0** (`COPYING` is the GNU Library GPL version 2). LAME's `LICENSE` asks programs to acknowledge LAME and link to www.mp3dev.org; the About box does. | `Copyright (C) 1991 Free Software Foundation` (license text); authors in LAME's source | [`licenses/LAME-3.100-COPYING.txt`](licenses/LAME-3.100-COPYING.txt), [`licenses/LAME-3.100-LICENSE.txt`](licenses/LAME-3.100-LICENSE.txt) |
 
 libsndfile also has internal codecs (ALAC, GSM 6.10, G.72x, IMA/MS ADPCM; the ALAC and GSM subtypes are listed by `soundfile.available_subtypes()`). Their individual notices are **not verified locally**.
 
-Spledio rejects MP3/Ogg/Opus on import and exports only WAV and FLAC, but **redistributing `libsndfile_arm64.dylib` redistributes all of the codecs above**. **Gap:** before distributing a bundle, obtain the upstream COPYING/LICENSE files for libFLAC, libogg, libvorbis, libopus, mpg123 and LAME (the BSD-3-Clause ones require the copyright notice in binary distributions).
+Spledio rejects MP3/Ogg/Opus on import and exports only WAV and FLAC, but **redistributing `libsndfile_arm64.dylib` redistributes all of the codecs above**, so all their license files ship with the app. The source archives of libsndfile and the codecs, and the build recipe, are offered with each release (`scripts/fetch_lgpl_sources.sh`, [`licenses/SOURCE-AND-REPLACING-LIBRARIES.md`](licenses/SOURCE-AND-REPLACING-LIBRARIES.md)).
 
 ### sounddevice 0.5.5 (python-sounddevice)
 
@@ -118,7 +127,7 @@ Spledio rejects MP3/Ogg/Opus on import and exports only WAV and FLAC, but **redi
 | Version | `PortAudio V19.7.0-devel, revision unknown` (strings in the binary) |
 | License | MIT, per the only shipped notice: `PortAudio by Ross Bencina and Phil Burk, MIT License.` (portaudio-binaries `README.md`) |
 | Copyright | Shipped: "PortAudio by Ross Bencina and Phil Burk". Upstream [LICENSE.txt](https://github.com/PortAudio/portaudio/blob/master/LICENSE.txt): `Copyright (c) 1999-2006 Ross Bencina and Phil Burk` (web, **not in the wheel**). |
-| License file | [`licenses/portaudio-binaries-README.md`](licenses/portaudio-binaries-README.md) (the only notice in the wheel). **Gap:** the full PortAudio license text is not shipped; add the upstream LICENSE.txt to a distribution. |
+| License file | [`licenses/PortAudio-19.7.0-LICENSE.txt`](licenses/PortAudio-19.7.0-LICENSE.txt) (upstream `LICENSE.txt` at tag v19.7.0) and [`licenses/portaudio-binaries-README.md`](licenses/portaudio-binaries-README.md) (the only notice in the wheel). The binary says "revision unknown", so the exact PortAudio commit is not known; the license is the same MIT text. |
 | Links to | macOS system frameworks only (CoreAudio, AudioToolbox, AudioUnit, CoreFoundation, CoreServices) |
 
 ### cffi 2.1.1
@@ -147,8 +156,26 @@ Homebrew CPython 3.14.7.
 
 | Component | License | Copyright as shipped | File |
 |---|---|---|---|
-| CPython 3.14.7 | PSF-2.0 (Python Software Foundation License; see file for history and CNRI/CWI terms) | `Copyright (c) 2001 Python Software Foundation; All Rights Reserved` | [`licenses/CPython-3.14-LICENSE.txt`](licenses/CPython-3.14-LICENSE.txt) (from `.../lib/python3.14/LICENSE.txt`) |
-| Libraries the python.org interpreter brings into the app (release build, 2026-11-07): OpenSSL 3.5.9 (`libssl.3`, `libcrypto.3`), zstd 1.5.7 (`libzstd.1`), and xz/liblzma and mpdecimal 4.0.1 compiled into `_lzma` and `_decimal`. SQLite is not bundled. | Expected: Apache-2.0 (OpenSSL 3), BSD-3-Clause (zstd, which also offers GPL-2.0), 0BSD (xz's liblzma), BSD-2-Clause (mpdecimal). **Not verified** against upstream files. | not verified | **missing**: see gap 5 |
+| CPython 3.14.10 (in the app; 3.14.7 for development) | PSF-2.0 (Python Software Foundation License; see file for history and CNRI/CWI terms) | `Copyright (c) 2001 Python Software Foundation; All Rights Reserved` | [`licenses/CPython-3.14-LICENSE.txt`](licenses/CPython-3.14-LICENSE.txt) (from `.../lib/python3.14/LICENSE.txt`) |
+| Software incorporated in CPython 3.14.10 (Mersenne Twister, SipHash, dtoa, expat 2.9.0, libmpdec (mpdecimal 4.0.1), the Zstandard bindings, and the rest of CPython's list) | various permissive licenses, as listed | see file | [`licenses/CPython-3.14.10-incorporated-software.txt`](licenses/CPython-3.14.10-incorporated-software.txt) |
+| HACL* (in `_sha1`, `_sha2`, `_sha3`, `_md5`, `_blake2`, `_hmac`) | MIT | `Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation`, `Copyright (c) 2022-2023 HACL* Contributors` | [`licenses/CPython-3.14.10-HACL-MIT.txt`](licenses/CPython-3.14.10-HACL-MIT.txt) |
+| OpenSSL 3.5.9 (`libssl.3.dylib`, `libcrypto.3.dylib`) | Apache-2.0 | see file | [`licenses/OpenSSL-3.5.9-LICENSE.txt`](licenses/OpenSSL-3.5.9-LICENSE.txt) |
+| zstd 1.5.7 (`libzstd.1.dylib`) | BSD-3-Clause (zstd is dual BSD/GPL-2.0; Spledio uses BSD) | `Copyright (c) Meta Platforms, Inc. and affiliates. All rights reserved.` | [`licenses/zstd-1.5.7-LICENSE.txt`](licenses/zstd-1.5.7-LICENSE.txt) |
+| XZ Utils 5.2.3, liblzma (compiled into `_lzma`) | **public domain**, per the `COPYING` of XZ Utils 5.2.3 (later XZ releases changed to 0BSD) | none | [`licenses/xz-5.2.3-COPYING.txt`](licenses/xz-5.2.3-COPYING.txt) |
+
+The python.org build links these system libraries of macOS, which are not bundled: `libz`, `libbz2`, `libffi` (for `_ctypes`), `libedit` (for `readline`). SQLite is not bundled.
+
+### PyInstaller 6.22.3 bootloader (only in the packaged app)
+
+The app's main executable (`Spledio.app/Contents/MacOS/Spledio`) is PyInstaller's
+bootloader, which starts the bundled Python. It is under GPL-2.0-or-later with the
+PyInstaller Bootloader Exception, which allows distributing it with any program
+(`SPDX: GPL-2.0-or-later WITH Bootloader-exception`). PyInstaller itself is a build
+tool and is not in the app. License file:
+[`licenses/PyInstaller-6.22.3-COPYING.txt`](licenses/PyInstaller-6.22.3-COPYING.txt).
+The build also keeps `setuptools` and `packaging` out of the app
+(`--exclude-module`; `scripts/release_macos.sh` fails if they are bundled): cffi
+mentions setuptools only for compiling C extensions, which Spledio never does.
 
 ## Development-only dependencies (not redistributed)
 
@@ -170,18 +197,28 @@ part of a distributed app.
 `pip` 26.3 is also present in `.venv`. It is a tool, not a dependency, and is
 not listed or redistributed.
 
-## Gaps to close before distributing a bundled app
+## Status of the notices for a distributed app (2026-11-07)
 
-1. LGPL-3.0 text for Qt/PySide6/shiboken6 (not shipped in the wheels or anywhere on this machine).
-2. Third-party notices for code inside the Qt parts that ship (QtCore, QtGui, QtWidgets, QtDBus, QtSvg and the cocoa, svg and macstyle plugins: libpng, FreeType, HarfBuzz, md4c, PCRE2, …). The JPEG, TIFF and WebP plugins are removed from the bundle (`scripts/prune_qt_bundle.py`), so libjpeg-turbo, libtiff and libwebp notices are not needed. Sources: [Licenses Used in Qt](https://doc.qt.io/qt-6/licenses-used-in-qt.html) and the Qt SBOM.
-3. Upstream license files for libFLAC, libogg, libvorbis, libopus, mpg123 and LAME (LAME needs the LGPL-2.0 text).
-4. The full PortAudio license text.
-5. Notices for the libraries the python.org interpreter brings in: OpenSSL 3.5.9, zstd 1.5.7, xz (liblzma) and mpdecimal 4.0.1 (see the table above).
-6. The app's `Contents/Resources/licenses/` folder gets `LICENSE`, this file and every file in `licenses/` except the development-only tools (`scripts/release_macos.sh`). The texts in gaps 1–5 must be added to `licenses/` before a public release.
+The gaps found on 2026-11-06 are closed:
+
+1. LGPL-3.0 text for Qt/PySide6/shiboken6: [`licenses/LGPL-3.0.txt`](licenses/LGPL-3.0.txt).
+2. Third-party code inside the Qt binaries that ship: [`licenses/Qt-6.11.3-third-party-notices.md`](licenses/Qt-6.11.3-third-party-notices.md) and its 18 license texts.
+3. libFLAC, libogg, libvorbis, libopus, mpg123 and LAME: their upstream license files (LAME's is the LGPL-2.0).
+4. PortAudio: its full license text.
+5. The libraries the python.org interpreter brings in: OpenSSL 3.5.9, zstd 1.5.7, XZ Utils 5.2.3 (liblzma is public domain, not 0BSD as written here before), mpdecimal and expat (in CPython's list of incorporated software), and HACL*.
+6. The app's `Contents/Resources/licenses/` gets `LICENSE`, this file and every file in `licenses/` except the development-only tools (`scripts/release_macos.sh`), and shows them under Help ▸ Licenses and Notices.
+
+Still open:
+
+- **libquadmath's exact GCC version** (LGPL-2.1, from the scipy wheel). It is not readable from the binary. SciPy 1.17.1's build workflow points to GitHub's preinstalled `gfortran-13` (see [`licenses/SOURCE-AND-REPLACING-LIBRARIES.md`](licenses/SOURCE-AND-REPLACING-LIBRARIES.md)), so the matching GCC 13 source is not pinned yet.
+- **Publishing the source.** The LGPL and GPL source offers are only met once the release publishes `Spledio-<version>-source.tar.gz` and `third-party-sources/` next to the DMG (`scripts/release_macos.sh` makes both) and the repository is public.
+- This review was done by the project, not by a lawyer.
 
 ## License file sources and checksums
 
-SHA-256 (first 16 hex digits) of each file in `licenses/`; each file is identical to its source.
+SHA-256 (first 16 hex digits) of each file in `licenses/`. Each file is identical to its source unless
+the Source column says it was converted, extracted or written for Spledio. `tests/test_licenses.py` checks
+that this table lists every file in `licenses/` with its current hash.
 `SP` = `.venv/lib/python3.14/site-packages`.
 
 | File in `licenses/` | Source | SHA-256 (prefix) |
@@ -221,3 +258,40 @@ SHA-256 (first 16 hex digits) of each file in `licenses/`; each file is identica
 | `pygments-LICENSE.txt` | `SP/pygments-2.21.0.dist-info/licenses/LICENSE` | `a9d66f1d526df02e` |
 | `pygments-AUTHORS.txt` | `SP/pygments-2.21.0.dist-info/licenses/AUTHORS` | `71a83872ad82f57b` |
 | `typing_extensions-LICENSE.txt` | `SP/typing_extensions-4.16.0.dist-info/licenses/LICENSE` | `3b2f81fe21d181c4` |
+| `LGPL-3.0.txt` | <https://www.gnu.org/licenses/lgpl-3.0.txt> (downloaded 2026-11-07) | `e3a994d82e644b03` |
+| `Qt-6.11.3-AFL-2.1.txt` | `LICENSES/AFL-2.1.txt`, qt/qtbase tag `v6.11.3` | `93bb4f7417aa775b` |
+| `Qt-6.11.3-Apache-2.0.txt` | `LICENSES/Apache-2.0.txt`, qt/qtbase tag `v6.11.3` | `e3ba223bb1423f0a` |
+| `Qt-6.11.3-BSD-2-Clause.txt` | `LICENSES/BSD-2-Clause.txt`, qt/qtbase tag `v6.11.3` | `8fda146749ca071a` |
+| `Qt-6.11.3-BSD-3-Clause.txt` | `LICENSES/BSD-3-Clause.txt`, qt/qtbase tag `v6.11.3` | `9f0490f18656c6f2` |
+| `Qt-6.11.3-CC0-1.0.txt` | `LICENSES/CC0-1.0.txt`, qt/qtbase tag `v6.11.3` | `a2010f343487d3f7` |
+| `Qt-6.11.3-FTL.txt` | `LICENSES/FTL.txt`, qt/qtbase tag `v6.11.3` | `08c135755dd58903` |
+| `Qt-6.11.3-HPND-sell-variant.txt` | `LICENSES/HPND-sell-variant.txt`, qt/qtsvg tag `v6.11.3` | `3a946598a9f674d4` |
+| `Qt-6.11.3-HPND.txt` | `LICENSES/HPND.txt`, qt/qtbase tag `v6.11.3` | `67ac968431270291` |
+| `Qt-6.11.3-Imlib2.txt` | `LICENSES/Imlib2.txt`, qt/qtbase tag `v6.11.3` | `8846f2baba1a7f4c` |
+| `Qt-6.11.3-libpng-2.0.txt` | `LICENSES/libpng-2.0.txt`, qt/qtbase tag `v6.11.3` | `7317e078e2d3b5d7` |
+| `Qt-6.11.3-Libpng.txt` | `LICENSES/Libpng.txt`, qt/qtbase tag `v6.11.3` | `58fe669792f9b4e0` |
+| `Qt-6.11.3-LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt` | `LICENSES/LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt`, qt/qtbase tag `v6.11.3` | `0526625fcc746a42` |
+| `Qt-6.11.3-LicenseRef-ICC-License.txt` | `LICENSES/LicenseRef-ICC-License.txt`, qt/qtbase tag `v6.11.3` | `9e34ff47b3a44814` |
+| `Qt-6.11.3-LicenseRef-SHA1-Public-Domain.txt` | `LICENSES/LicenseRef-SHA1-Public-Domain.txt`, qt/qtbase tag `v6.11.3` | `65d86b8ec6b1cd8b` |
+| `Qt-6.11.3-MIT-open-group.txt` | `LICENSES/MIT-open-group.txt`, qt/qtbase tag `v6.11.3` | `c55d2ab72d8a4f9e` |
+| `Qt-6.11.3-MIT.txt` | `LICENSES/MIT.txt`, qt/qtbase tag `v6.11.3` | `d040359701c01996` |
+| `Qt-6.11.3-third-party-notices.md` | **written for Spledio** from the `qt_attribution.json` files of qtbase and qtsvg at `v6.11.3` and pyside-setup at `v6.11.3` | `1d6e351f094bd865` |
+| `Qt-6.11.3-Unicode-3.0.txt` | `LICENSES/Unicode-3.0.txt`, qt/qtbase tag `v6.11.3` | `80bb6294022d8764` |
+| `Qt-6.11.3-X11.txt` | `LICENSES/X11.txt`, qt/qtbase tag `v6.11.3` | `e2936c6509784b4f` |
+| `PySide6-6.11.3-PSF-3.7.0.txt` | `sources/shiboken6/shibokenmodule/files.dir/shibokensupport/signature/PSF-3.7.0.txt`, pyside-setup tag `v6.11.3` | `e5bdc4b568f0016d` |
+| `libFLAC-1.4.3-COPYING.Xiph.txt` | `COPYING.Xiph` in `flac-1.4.3.tar.xz` (downloads.xiph.org) | `12600ea1a7affcbf` |
+| `libogg-1.3.5-COPYING.txt` | `COPYING` in `libogg-1.3.5.tar.gz` (downloads.xiph.org) | `d2ab5758336489da` |
+| `libvorbis-1.3.7-COPYING.txt` | `COPYING` in `libvorbis-1.3.7.tar.gz` (downloads.xiph.org) | `ec1815db59fcd302` |
+| `libopus-1.4-COPYING.txt` | `COPYING` in `opus-1.4.tar.gz` (downloads.xiph.org) | `8338ce8d922bb441` |
+| `mpg123-1.32.3-COPYING.txt` | `COPYING` in `mpg123-1.32.3.tar.bz2` (mpg123.de) | `c22482728a634a8d` |
+| `mpg123-1.32.3-AUTHORS.txt` | `AUTHORS` in `mpg123-1.32.3.tar.bz2` (mpg123.de) | `bfa5dab0ed3b3ea7` |
+| `LAME-3.100-COPYING.txt` | `COPYING` in `lame-3.100.tar.gz` (SourceForge) | `bfe4a52dc4645385` |
+| `LAME-3.100-LICENSE.txt` | `LICENSE` in `lame-3.100.tar.gz` (SourceForge) | `7a40cbd8818c57e5` |
+| `PortAudio-19.7.0-LICENSE.txt` | `LICENSE.txt`, PortAudio/portaudio tag `v19.7.0` | `ec52a1952d701f94` |
+| `CPython-3.14.10-incorporated-software.txt` | **converted:** section "Licenses and Acknowledgements for Incorporated Software" of `license.html` in python.org's `python-3.14.10-macos11.pkg`, as plain text, with a note added at the top | `b4eecf7daa152180` |
+| `CPython-3.14.10-HACL-MIT.txt` | **extracted:** license header of `Modules/_hacl/Hacl_Hash_SHA2.c`, python/cpython tag `v3.14.10`, with a two-line heading added | `6ee917331c2d1ed2` |
+| `OpenSSL-3.5.9-LICENSE.txt` | `LICENSE.txt`, openssl/openssl tag `openssl-3.5.9` | `7d5450cb2d142651` |
+| `zstd-1.5.7-LICENSE.txt` | `LICENSE`, facebook/zstd tag `v1.5.7` | `7055266497633c90` |
+| `xz-5.2.3-COPYING.txt` | `COPYING`, tukaani-project/xz tag `v5.2.3` | `c4f8e14fafe458d8` |
+| `PyInstaller-6.22.3-COPYING.txt` | `.venv-build/.../pyinstaller-6.22.3.dist-info/licenses/COPYING.txt` | `0598064c7d2718e3` |
+| `SOURCE-AND-REPLACING-LIBRARIES.md` | **written for Spledio** | `e4e4e54f7c3a1421` |

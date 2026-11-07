@@ -16,7 +16,8 @@
 # Local test build (ad-hoc signed, NOT notarized, only runs on this Mac):
 #   PYTHON="$(scripts/get_build_python.sh)" UNSIGNED=1 scripts/release_macos.sh
 #
-# Output: dist/Spledio-macOS-arm64.dmg and dist/Spledio-macOS-arm64.dmg.sha256
+# Output: dist/Spledio-macOS-arm64.dmg, its .sha256, dist/Spledio-<version>-source.tar.gz and
+#         dist/third-party-sources/ (the LGPL library sources; publish all of them together)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,6 +46,16 @@ if [[ "$UNSIGNED" != "1" ]]; then
   SIGN="$SIGN_IDENTITY"
 else
   SIGN="-"   # ad-hoc
+fi
+# GPL-3.0: the source archive published with the app is made from HEAD, so a public release must
+# be built from committed code.
+DIRTY="$(git status --porcelain 2>/dev/null || echo "not a git checkout")"
+if [[ -n "$DIRTY" ]]; then
+  if [[ "$UNSIGNED" == "1" ]]; then
+    echo "warning: uncommitted changes – the source archive will be HEAD, not exactly this build"
+  else
+    die "commit or stash your changes first: the source archive must match the release build"
+  fi
 fi
 echo "Spledio $VERSION · bundle id $BUNDLE_ID · $( [[ "$UNSIGNED" == "1" ]] && echo 'UNSIGNED test build' || echo "signing as: $SIGN" )"
 
@@ -87,6 +98,8 @@ rm -rf build dist
   --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtQml \
   --exclude-module PySide6.QtQuick --exclude-module PySide6.QtMultimedia \
   --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtPdf \
+  --exclude-module setuptools --exclude-module pkg_resources --exclude-module _distutils_hack \
+  --exclude-module distutils --exclude-module packaging \
   src/spledio/__main__.py
 APP="dist/$APP_NAME.app"
 [[ -d "$APP" ]] || die "PyInstaller did not produce $APP"
@@ -116,6 +129,13 @@ fi
 for lib in libsndfile libportaudio; do
   find "$APP" -name "${lib}*" | grep -q . || die "$lib missing from the bundle"
 done
+# Build and test tools must stay out of the app: their licenses are not shipped with it. (cffi
+# mentions setuptools only for compiling C extensions, which the app never does: soundfile and
+# sounddevice load their libraries with ffi.dlopen.)
+if grep -E -q "^ *\('(setuptools|pkg_resources|_distutils_hack|distutils|packaging|pytest|pytestqt|pygments)[.']" \
+     "build/$APP_NAME/PYZ-00.toc" || [[ -e "$APP/Contents/Resources/setuptools" ]]; then
+  die "build tools (setuptools/packaging/pytest/pygments) were bundled – add them to the --exclude-module list"
+fi
 # The lowest macOS the app runs on = the highest minimum of any binary inside it. Recorded in
 # Info.plist so older Macs show "needs macOS X" instead of crashing (must happen before signing).
 MIN_MACOS="$("$BUILD_VENV/bin/python" scripts/bundle_min_macos.py "$APP")"
@@ -189,6 +209,12 @@ fi
 step "Checksum"
 (cd dist && shasum -a 256 "$DMG_NAME" | tee "$DMG_NAME.sha256")
 
+step "Source code to publish with the app (GPL-3.0 / LGPL; see licenses/SOURCE-AND-REPLACING-LIBRARIES.md)"
+SRC_TGZ="dist/$APP_NAME-$VERSION-source.tar.gz"
+git archive --format=tar.gz --prefix="$APP_NAME-$VERSION/" -o "$SRC_TGZ" HEAD
+echo "$SRC_TGZ ($(git rev-parse --short HEAD))"
+scripts/fetch_lgpl_sources.sh dist/third-party-sources
+
 cat <<EOF
 
 Done: $DMG   (Spledio $VERSION, Apple Silicon, macOS $MIN_MACOS or later)
@@ -196,6 +222,8 @@ Done: $DMG   (Spledio $VERSION, Apple Silicon, macOS $MIN_MACOS or later)
 Next (signed builds only):
   1. Test the DMG on a clean Mac or a new user account (open, play, edit, export, save, reopen).
   2. git tag v$VERSION && git push origin v$VERSION
-  3. gh release create v$VERSION "$DMG" "$DMG.sha256" --title "Spledio $VERSION" --notes-file <release-notes.md>
-     (keep the asset name $DMG_NAME – the website download link depends on it)
+  3. gh release create v$VERSION "$DMG" "$DMG.sha256" "$SRC_TGZ" dist/third-party-sources/* \
+       --title "Spledio $VERSION" --notes-file <release-notes.md>
+     (keep the asset name $DMG_NAME – the website download link depends on it; the source
+      archives must be published with the app, see licenses/SOURCE-AND-REPLACING-LIBRARIES.md)
 EOF

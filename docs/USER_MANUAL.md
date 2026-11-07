@@ -238,7 +238,10 @@ including modified versions, under the same license. It comes **without any warr
 * Source code: <https://github.com/iacompa/Spledio>
 * Full license: [LICENSE](../LICENSE)
 * Third-party components (Qt/PySide6 under LGPL-3.0, NumPy, SciPy, libsndfile, PortAudio and others):
-  [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)
+  [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). In the app, **Help → Licenses and Notices** shows
+  Spledio's license and every third-party license text. Nothing is downloaded: the files are inside the app.
+* The source code of the libraries under the LGPL, and how to run Spledio with your own build of one of
+  them: [licenses/SOURCE-AND-REPLACING-LIBRARIES.md](../licenses/SOURCE-AND-REPLACING-LIBRARIES.md).
 
 Spledio is an independent project. It is not affiliated with or endorsed by any maker of commercial audio software.
 

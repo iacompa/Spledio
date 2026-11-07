@@ -113,25 +113,29 @@ removes most of the usual friction.
    notarization in a way that prevents this; the user can always re-sign
    ad-hoc.
 3. **Provide the license texts**: LGPL-3.0 and GPL-3.0 (LGPL-3.0 builds on
-   GPL-3.0). **The wheels do not ship them** (no license file anywhere under
-   `PySide6/`, `shiboken6/` or their dist-info), so add them from
-   <https://www.gnu.org/licenses/>. Show a prominent notice that the app uses
-   Qt under LGPL-3.0, for example in the About box and the bundled notices
-   file.
+   GPL-3.0). The wheels do not ship them (no license file anywhere under
+   `PySide6/`, `shiboken6/` or their dist-info). **Done:** `licenses/LGPL-3.0.txt`
+   and `LICENSE` (both from <https://www.gnu.org/licenses/>); the About box says
+   the app uses Qt under LGPL-3.0.
 4. **Offer the complete corresponding source** of the LGPL components you
    ship, even unmodified: Qt 6.11.3 and PySide6/shiboken6 6.11.3. Either ship
    it, or give a written offer or a stable link to the exact versions
    (<https://download.qt.io/official_releases/qt/6.11/6.11.3/> and
    <https://download.qt.io/official_releases/QtForPython/pyside6/>; check
    these URLs before release). Keeping a mirror next to Spledio's own source
-   release is the most robust option.
+   release is the most robust option. **Done:** `scripts/fetch_lgpl_sources.sh`
+   collects the exact archives (URLs checked 2026-11-07) for publishing with
+   each release.
 5. **Include third-party notices for code inside Qt.** QtCore/QtGui contain
    PCRE2, libpng 1.6.59, FreeType, HarfBuzz, md4c and others; the
    imageformats plugins contain libtiff, libwebp and libjpeg-turbo. See
    [Licenses Used in Qt](https://doc.qt.io/qt-6/licenses-used-in-qt.html)
    (that page tracks current Qt, so versions may differ slightly from 6.11.3)
    and the Qt SBOM. FreeType's FTL option requires a credit in the
-   documentation. **These texts are not in the wheel.**
+   documentation. These texts are not in the wheel. **Done:**
+   `licenses/Qt-6.11.3-third-party-notices.md` (from `qt_attribution.json` at
+   v6.11.3, checked against the shipped binaries) with its license texts; the
+   FreeType credit is in the About box.
 6. **Ship only what is used.** Exclude PySide6_Addons modules, QtWebEngine,
    QtMultimedia, FFmpeg, the Qt tools (`Designer.app`, `Assistant.app`,
    `Linguist.app`, `qmlls`, `qmllint`, `qmlformat`, `lupdate`, `lrelease`,
@@ -183,7 +187,9 @@ libvorbis 1.3.7, libopus 1.4, mpg123 1.32.3 and LAME 3.100. The wheel ships
 only `_soundfile_data/COPYING` (LGPL-2.1 text). The codec licenses come from
 the [libsndfile-binaries](https://github.com/bastibe/libsndfile-binaries)
 README (BSD-3-Clause for FLAC/Ogg Vorbis/Opus, LGPL-2.1 for mpg123, LGPL v2
-for LAME) and are **not verified locally**.
+for LAME). On 2026-11-07 they were confirmed from the upstream release files,
+now in `licenses/` (libogg is 1.3.5, from the build recipe at
+libsndfile-binaries commit `804500c4`).
 
 When distributing:
 
@@ -192,13 +198,14 @@ When distributing:
    the notices how to replace it.
 2. Include the LGPL-2.1 text ([`licenses/libsndfile-LGPL-2.1.txt`](../licenses/libsndfile-LGPL-2.1.txt)),
    the LGPL-2.0 text for LAME, and the BSD-3-Clause notices for
-   FLAC/Ogg/Vorbis/Opus. The upstream codec files are **missing**; obtain
-   them first.
+   FLAC/Ogg/Vorbis/Opus. **Done** (`licenses/`).
 3. Provide or offer the corresponding source of libsndfile **and** of every
    LGPL library statically linked into it (mpg123, LAME), at the exact
    versions above, plus the build scripts. The libsndfile-binaries repository
-   holds the build recipe. Check which commit matches soundfile 0.13.1 before
-   release (**not verified**).
+   holds the build recipe: commit `804500c476f9f8059b25eafafbe97593ee16452e`
+   builds exactly the versions found in the binary (FLAC 1.4.3, Opus 1.4,
+   Vorbis 1.3.7, mpg123 1.32.3, LAME 3.100). `scripts/fetch_lgpl_sources.sh`
+   collects all of them.
 4. Static linking of mpg123/LAME into an LGPL library that is itself
    distributed as a replaceable dylib with source satisfies relinking: the
    user can rebuild the whole dylib.
@@ -233,10 +240,10 @@ When distributing:
   (PortAudio `V19.7.0-devel, revision unknown`, universal x86_64/arm64). It
   links only macOS system audio frameworks.
 - License: MIT. The only notice in the wheel is the README line "PortAudio
-  by Ross Bencina and Phil Burk, MIT License." **The full license text is not
-  shipped.** Add upstream
-  [LICENSE.txt](https://github.com/PortAudio/portaudio/blob/master/LICENSE.txt)
-  (`Copyright (c) 1999-2006 Ross Bencina and Phil Burk`) to a distribution.
+  by Ross Bencina and Phil Burk, MIT License." The full license text is not
+  in the wheel; upstream `LICENSE.txt` at tag v19.7.0
+  (`Copyright (c) 1999-2006 Ross Bencina and Phil Burk`) is in
+  `licenses/PortAudio-19.7.0-LICENSE.txt` and ships with the app.
   Upstream also makes a non-binding request that modifications be sent back.
 - **Windows (untested):** the sounddevice Windows wheel also ships an
   ASIO-enabled PortAudio DLL (`*-asio.dll`; the README credits the Steinberg

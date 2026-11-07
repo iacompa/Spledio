@@ -117,7 +117,8 @@ QtGui, QtWidgets and QtDBus (QtGui links QtDBus on macOS), `libpyside6`,
 `libportaudio.dylib`, and scipy's `libgfortran.5`, `libgcc_s.1.1` and
 `libquadmath.0`. The interpreter may pull in Homebrew or python.org copies
 of OpenSSL `libcrypto` (Spledio imports `hashlib`), `liblzma`, `libmpdec`
-and `libsqlite3`. Their notices must be added; see
+and `libsqlite3`. In the python.org build they are OpenSSL 3.5.9, zstd 1.5.7,
+XZ Utils 5.2.3 and mpdecimal 4.0.1 (no SQLite); their notices are in `licenses/`, see
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
 
 Then test on a **clean** Mac or a new user account: open, play, edit, undo,
@@ -127,27 +128,26 @@ data appears outside the paths in
 
 ### 4. LGPL / GPL compliance inside the bundle
 
-Put these into `Spledio.app/Contents/Resources/licenses/` and link them
-from the About box:
+Status 2026-11-07: done in `scripts/release_macos.sh`, the app and `licenses/`
+(only the libquadmath GCC version is still open, see
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md#status-of-the-notices-for-a-distributed-app-2026-11-07)).
 
-1. `LICENSE` (Spledio, GPL-3.0-only), `THIRD_PARTY_NOTICES.md` and every
-   file in `licenses/`.
-2. **Missing texts to add first** (not shipped by the wheels):
-   - LGPL-3.0 (Qt/PySide6/shiboken6)
-   - LGPL-2.0 (LAME)
-   - upstream license files of libFLAC, libogg, libvorbis, libopus, mpg123
-     and PortAudio
-   - Qt's third-party notices (libpng, FreeType, HarfBuzz, md4c, PCRE2, ...;
-     see [Licenses Used in Qt](https://doc.qt.io/qt-6/licenses-used-in-qt.html))
-   - notices for the interpreter's dylibs
-3. A `SOURCE.txt` with:
-   - a link to the exact Spledio source release, including the `.spec`
-     file and build scripts (this satisfies GPL-3.0 §6);
-   - links to or a written offer for the exact sources of Qt 6.11.3,
-     PySide6/shiboken6 6.11.3, libsndfile 1.2.2 with mpg123 1.32.3 and
-     LAME 3.100 (the libsndfile-binaries build recipe), libquadmath (GCC),
-     and CPython 3.14.7.
-4. A short **"Replacing libraries"** section:
+1. `Spledio.app/Contents/Resources/licenses/` gets `LICENSE` (Spledio, GPL-3.0-only),
+   `THIRD_PARTY_NOTICES.md` and every file in `licenses/` except the development-only
+   tools. **Help ▸ Licenses and Notices** shows them; the About box lists the main
+   components and carries the LAME, mpg123 and FreeType credits.
+2. The texts the wheels do not ship are in `licenses/`: LGPL-3.0 (Qt/PySide6/shiboken6),
+   LGPL-2.0 (LAME), the upstream files of libFLAC, libogg, libvorbis, libopus, mpg123
+   and PortAudio, Qt's third-party notices (`Qt-6.11.3-third-party-notices.md` and
+   18 license texts), and the notices for the interpreter's libraries.
+3. Source: the release script makes `dist/Spledio-<version>-source.tar.gz`
+   (`git archive` of the built commit; a signed release refuses uncommitted changes)
+   and `dist/third-party-sources/` (`scripts/fetch_lgpl_sources.sh`: Qt 6.11.3 qtbase
+   and qtsvg, pyside-setup 6.11.3, libsndfile 1.2.2, mpg123, LAME, the Xiph codecs and
+   the libsndfile-binaries build recipe, checked against pinned SHA-256). Publish both
+   with the DMG. [`licenses/SOURCE-AND-REPLACING-LIBRARIES.md`](../licenses/SOURCE-AND-REPLACING-LIBRARIES.md)
+   explains this to users.
+4. **Replacing libraries** (in the same file):
    - Qt lives in `Contents/Frameworks/PySide6/Qt/lib/*.framework`,
      libsndfile in `Contents/Frameworks/_soundfile_data/libsndfile_arm64.dylib`, PortAudio
      in `Contents/Frameworks/_sounddevice_data/portaudio-binaries/libportaudio.dylib`

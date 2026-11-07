@@ -208,6 +208,7 @@ Disabled actions show the reason in their tooltip and in the status bar.
 | **Tutorials…** `help.tutorials` | F1 | Short guided tutorials | view | no | no | Always available | implemented |
 | **Keyboard Shortcuts…** `help.shortcuts` | — | View and remap shortcuts | view | no | no | Always available | implemented |
 | **Cancel Running Operation** `help.cancel_job` | — | Cancel the current render/analysis job | view | no | no | , lambda: None if self.ctl.busy else  | implemented |
+| **Licenses and Notices…** `help.licenses` | — | Spledio's license and the licenses of the components it includes | view | no | no | Always available | implemented |
 | **About Spledio** `help.about` | — | Version, license and privacy information | view | no | no | Always available | implemented |
 
 ## Mouse & modifiers on the spectrogram

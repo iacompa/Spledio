@@ -50,6 +50,33 @@ def _icon(name):
         return None
 
 
+def _component_versions() -> str:
+    """The main components and their versions, read from the running app (not hard-coded)."""
+    import platform
+
+    parts = []
+
+    def add(name, get, lic):
+        try:
+            v = get()
+        except Exception:  # a missing component must not break the About box
+            v = ""
+        parts.append(f"{name} {v} ({lic})" if v else f"{name} ({lic})")
+
+    from PySide6 import __version__ as pyside_version
+    from PySide6.QtCore import qVersion
+
+    add("Qt", qVersion, "LGPL-3.0")
+    add("PySide6", lambda: pyside_version, "LGPL-3.0")
+    add("Python", platform.python_version, "PSF-2.0")
+    add("NumPy", lambda: __import__("numpy").__version__, "BSD-3-Clause")
+    add("SciPy", lambda: __import__("scipy").__version__, "BSD-3-Clause")
+    add("libsndfile", lambda: __import__("soundfile").__libsndfile_version__, "LGPL-2.1")
+    add("PortAudio", lambda: __import__("sounddevice").get_portaudio_version()[1].split(",")[0]
+        .replace("PortAudio", "").strip().lstrip("V"), "MIT")
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 class MainWindow(QMainWindow):
     def __init__(self, controller: EditorController | None = None):
         super().__init__()
@@ -379,6 +406,9 @@ class MainWindow(QMainWindow):
         A(ActionSpec("help.shortcuts", "Keyboard Shortcuts…", "View and remap shortcuts", self.shortcuts_dialog, "Help", ""))
         A(ActionSpec("help.cancel_job", "Cancel Running Operation", "Cancel the current render/analysis job", self.ctl.cancel_job,
                      "Help", "", "", lambda: None if self.ctl.busy else "Nothing is running"))
+        A(ActionSpec("help.licenses", "Licenses and Notices…",
+                     f"{APP_NAME}'s license and the licenses of the components it includes", self.licenses_dialog,
+                     "Help", ""))
         A(ActionSpec("help.about", f"About {APP_NAME}", "Version, license and privacy information", self.about, "Help", ""))
 
     # ---------------------------------------------------------- helpers
@@ -459,7 +489,7 @@ class MainWindow(QMainWindow):
             if spec.id.startswith("select.mode_"):
                 mode_group.addAction(act)
             m = menu_for(spec.menu)
-            if spec.id in ("file.export", "file.quit", "edit.apply_gain", "select.invert", "view.reset", "help.about"):
+            if spec.id in ("file.export", "file.quit", "edit.apply_gain", "select.invert", "view.reset", "help.licenses"):
                 m.addSeparator()
             m.addAction(act)
         self.addActions(list(self.actions.actions.values()))  # shortcuts work even with menus hidden
@@ -991,14 +1021,29 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def about(self):
-        QMessageBox.about(
-            self, f"About {APP_NAME}",
+    def licenses_dialog(self):
+        from spledio.ui.licenses_dialog import LicensesDialog
+
+        LicensesDialog(self).exec()
+
+    def about_html(self) -> str:
+        return (
             f"<h3>{APP_NAME} {__version__}</h3><p>{APP_TAGLINE} (working title: {APP_WORKING_TITLE}).</p>"
             "<p>Licensed under the GNU General Public License version 3 only (GPL-3.0-only).</p>"
             "<p>Privacy: all processing is local. No audio is uploaded, no analytics, no telemetry, no account.</p>"
             "<p>An independent implementation; not affiliated with or derived from any commercial spectral editor.</p>"
-            "<p>Third-party components: see THIRD_PARTY_NOTICES.md.</p>")
+            f"<p>Built with {_component_versions()}.</p>"
+            "<p>Audio file support uses libsndfile, which includes FLAC, Ogg, Vorbis, Opus, mpg123 and LAME.<br>"
+            "mpg123: Copyright (c) 1995-2020 by Michael Hipp and others, "
+            "free software under the terms of the LGPL v2.1.<br>"
+            "This software uses LAME, the MP3 encoder: "
+            "<a href=\"https://www.mp3dev.org/\">www.mp3dev.org</a>.<br>"
+            "Text rendering: this software is based in part on the work of the FreeType Team "
+            "(<a href=\"https://freetype.org/\">freetype.org</a>), through Qt.</p>"
+            "<p>Licenses of all included components: <b>Help ▸ Licenses and Notices</b>.</p>")
+
+    def about(self):
+        QMessageBox.about(self, f"About {APP_NAME}", self.about_html())
 
     # ============================================================ layout persistence
     def _toggle_focus(self, on):

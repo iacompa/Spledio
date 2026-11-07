@@ -51,13 +51,16 @@ the GPL requires (see below).
       smoke test (2026-11-07; see [RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07)).
 - [x] **Build with the python.org Python** (`scripts/get_build_python.sh`, nothing to install). The app
       now runs on macOS 15 or later.
-- [ ] **Add the missing license texts** to the bundle (list in `THIRD_PARTY_NOTICES.md`, "Gaps to close").
+- [x] **License texts in the bundle** (2026-11-07): every notice is in `Contents/Resources/licenses/` and in
+      Help ▸ Licenses and Notices (`THIRD_PARTY_NOTICES.md`, "Status of the notices"). Open: libquadmath's GCC version.
 - [ ] **First signed and notarized build**, made with `scripts/release_macos.sh`.
 - [ ] **Test the DMG on a clean Mac** (or a new user account): download from the release URL, open, edit,
       play, export, save and reopen.
 - [x] **Minimum macOS: 15.0** (Sequoia). The release script reads it from the app's binaries and prints
       it; it is on the page and in the user manual. Put it in each release's notes.
-- [ ] **Publish the GitHub release** (tag `v0.1.0`) with the DMG, its `.sha256` file and release notes.
+- [ ] **Make the repository public** (the page and the app link to it for the source code).
+- [ ] **Publish the GitHub release** (tag `v0.1.0`) with the DMG, its `.sha256` file, `Spledio-0.1.0-source.tar.gz`,
+      the files in `dist/third-party-sources/` and release notes. The source archives are required by the GPL/LGPL.
 - [ ] Put `website/spledio/` on the site and click every link once.
 
 ## License wording (use as-is)
@@ -87,6 +90,7 @@ Keep it that way if analytics are ever added to the site, or say so on the page.
 1. Bump the version (`pyproject.toml` and `spledio/__init__.py`) and update release notes / the changelog.
 2. Run the tests (`.venv/bin/python -m pytest`) and the real-app checks in [TESTING.md](TESTING.md).
 3. `scripts/release_macos.sh`, which builds, signs, notarizes, staples and verifies the DMG.
-4. Tag `vX.Y.Z`, push, and create the GitHub release with `Spledio-macOS-arm64.dmg` and its `.sha256` file.
+4. Tag `vX.Y.Z`, push, and create the GitHub release with `Spledio-macOS-arm64.dmg`, its `.sha256` file,
+   `Spledio-X.Y.Z-source.tar.gz` and `dist/third-party-sources/*` (the script prints the `gh release create` line).
 5. The website needs no change, because the download link always points to the newest release.
    Update the manual only if features changed.

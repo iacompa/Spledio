@@ -49,13 +49,17 @@ scripts/release_macos.sh
 
 What the script does, in order:
 
+0. Stops a signed build if the git checkout has uncommitted changes: the source archive it publishes must be
+   the code that was built (an `UNSIGNED=1` build only warns).
 1. Creates or updates a separate build venv (`.venv-build`; recreated automatically when `PYTHON` changes),
    installs the pinned requirements and PyInstaller (`requirements-packaging.txt`), and records
    `dist-build-freeze.txt`.
 2. Runs the test suite (set `SKIP_TESTS=1` to skip).
 3. Freezes `Spledio.app` with PyInstaller in **onedir** mode. Never use onefile: Qt and libsndfile must
-   stay replaceable files under the LGPL.
-4. Sets the version in `Info.plist` and copies `LICENSE`, `THIRD_PARTY_NOTICES.md` and `licenses/` into the bundle.
+   stay replaceable files under the LGPL. Build tools (setuptools, packaging, pytest, Pygments) are excluded;
+   the bundle check in step 6 fails if they come back.
+4. Sets the version in `Info.plist` and copies `LICENSE`, `THIRD_PARTY_NOTICES.md` and `licenses/` (without the
+   development-only tools) into `Contents/Resources/licenses/`. The app shows them under Help ▸ Licenses and Notices.
 5. Removes Qt plugins Spledio never uses, then every Qt framework nothing links to any more
    (`scripts/prune_qt_bundle.py`; see below).
 6. Checks the bundle: no FFmpeg, WebEngine, Pdf or Multimedia; libsndfile and PortAudio present. Reads the
@@ -69,6 +73,10 @@ What the script does, in order:
    `dist/notarization-log.json` and stops.
 10. Staples the ticket, validates it, and asks Gatekeeper (`spctl`) to assess the DMG.
 11. Writes `dist/Spledio-macOS-arm64.dmg.sha256`.
+12. Writes the source to publish with the app: `dist/Spledio-<version>-source.tar.gz` (`git archive HEAD`) and
+    `dist/third-party-sources/` (the LGPL library sources and the libsndfile build recipe, from
+    `scripts/fetch_lgpl_sources.sh`, about 80 MB, cached after the first run; see
+    [`licenses/SOURCE-AND-REPLACING-LIBRARIES.md`](../licenses/SOURCE-AND-REPLACING-LIBRARIES.md)).
 
 Then:
 
@@ -200,5 +208,7 @@ Apple Silicon Mac with macOS 27.0.1, PyInstaller 6.22.3 with pyinstaller-hooks-c
 * Developer ID signing and notarization are fine with the GPL. They do not stop users from modifying and
   running their own build, which they sign ad hoc.
 * **Do not distribute through the Mac App Store.** Its terms conflict with the GPL.
-* Qt/PySide6 are LGPL-3.0: ship them as separate frameworks (onedir build), include their license and a
-  link to their source (already in `THIRD_PARTY_NOTICES.md` and `licenses/`).
+* Qt/PySide6 are LGPL-3.0: ship them as separate frameworks (onedir build), include their license and
+  their source. The license texts are in `licenses/`; publish `dist/third-party-sources/` and the Spledio
+  source archive with every DMG. How users replace a library is in
+  [`licenses/SOURCE-AND-REPLACING-LIBRARIES.md`](../licenses/SOURCE-AND-REPLACING-LIBRARIES.md).
