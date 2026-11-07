@@ -107,18 +107,43 @@ def test_component_of_an_undone_area_is_freed_once_it_cannot_come_back(s):
         s.history.store.get(h)
 
 
-def test_difference_of_an_older_edit_is_exact_after_later_edits_over_it(s):
-    layer = s.project.layers[0]
-    s.set_selection(_sel(2.0, 12.0, 300.0, 5000.0))
+@pytest.mark.parametrize("spill", [False, True])
+def test_difference_and_ab_rebuild_the_state_before_the_edit_from_the_one_stored_copy(tmp_path, spill):
+    """Only the version not in the layer is stored (and only the edited channels), so the samples
+    before the last edit are rebuilt from it: exact for a one-channel edit, after undo/redo swaps,
+    with the copy on disk, and for an adjusted-area change."""
+    rng = np.random.default_rng(21)
+    sess = EditorSession.from_array(0.25 * rng.standard_normal((2, 20 * SR)), SR)
+    if spill:
+        sess.history.store = PatchStore(ram_budget_bytes=1, directory=str(tmp_path))
+    layer = sess.project.layers[0]
+
+    def check(pre, label):
+        post = layer.audio.astype(np.float64)
+        buf = sess.difference_buffer()
+        n = buf.data.shape[1]
+        assert buf.label == f"Removed by: {label}"
+        assert np.array_equal(buf.data, (pre - post)[:, buf.start : buf.start + n].astype(np.float32))
+        start, a, b, lab = sess.ab_regions()
+        assert (start, lab) == (buf.start, label)
+        now = post[:, start : start + n]
+        assert np.array_equal(b, now.astype(np.float32))
+        assert np.array_equal(a, (now + (pre - post)[:, start : start + n]).astype(np.float32))
+
+    sess.set_selection(_sel(2.0, 12.0, 300.0, 5000.0, ch=(1,)))
     pre = layer.audio.astype(np.float64)
-    s.apply_gain(-5.0)
-    want = pre - layer.audio  # what that edit removed
-    s.set_selection(_sel(4.0, 8.0, 1000.0, 3000.0, ch=(0,)))
-    s.adjust_area(target_db=-12.0)  # area steps do not count as "the last edit" for the difference
-    s.set_selection(_sel(6.0, 14.0, 100.0, 9000.0))
-    s.adjust_area(target_db=3.0)
-    buf = s.difference_buffer()
-    assert np.array_equal(buf.data, want[:, buf.start : buf.end].astype(np.float32))
+    sess.apply_gain(-5.0)
+    label = sess.history.undo_stack[-1].label
+    assert sess.history.store.get(sess.history.undo_stack[-1].patches[0].held).shape[0] == 1
+    check(pre, label)
+    sess.undo()
+    sess.redo()  # the held copy went into the layer and back
+    check(pre, label)
+    sess.set_selection(_sel(4.0, 15.0, 100.0, 9000.0))
+    pre2 = layer.audio.astype(np.float64)
+    sess.adjust_area(target_db=3.0)  # an adjusted-area change is the last edit now
+    check(pre2, sess.history.undo_stack[-1].label)
+    sess.close()
 
 
 def test_patch_store_spills_and_swaps_back_exactly(tmp_path):

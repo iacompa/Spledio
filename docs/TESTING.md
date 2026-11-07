@@ -16,33 +16,39 @@ This page records only what was actually run. Nothing here is projected or assum
 .venv/bin/python -m pytest -q
 ```
 
-Result: **425 passed, 1 skipped in 45 s** (426 collected) on 2026-11-07, and again in the release script's
-run before the latest packaged build. The skipped test needs a real audio device
-(`SPLEDIO_AUDIO_TEST=1`). `tests/test_licenses.py` covers Help ▸ Licenses and Notices, the About box
+Result: **516 passed in 37 s** with `SPLEDIO_AUDIO_TEST=1` (the real audio device test included) on
+2026-11-07, after the memory work for long files (`test_memory.py`, see
+[Memory measurements](#memory-measurements-2026-11-07)) and the fixes for selections at the file edges, extract levels, A/B after area changes,
+the save marker, saving after the source changed, project-file checks, playback of files with more
+channels than the output, Delete/Crop Time with a feather, dither only when samples need rounding,
+A/B of multi-part edits, the transfer brush at different layer levels, the selection after undoing a
+time edit, and the channel scope applied on the GUI thread. Without that variable the real-device
+test is skipped (515 passed, 1 skipped, 40 s). Before the memory work the same run gave 482 passed, and
+before those fixes 437. `tests/test_licenses.py` covers Help ▸ Licenses and Notices, the About box
 credits, the license texts the app must carry, and the checksum table in `THIRD_PARTY_NOTICES.md`. The time varies a lot with how busy the machine is: one run took 133 s, and one
 during heavy load took 412 s. That slow run exposed a real bug: quick level presses could become
 separate undo steps when rendering was slow. It is fixed, and a regression test was added
 (`test_merge_counts_from_the_press_not_from_when_rendering_finished`).
 
-The skipped test is `tests/test_playback.py` real-device test. It is opt-in because it plays sound
-through the default output (`SPLEDIO_AUDIO_TEST=1`). It was **not** run for this record. Real-device
-playback was instead checked in the real-app run below.
+The real-device test in `tests/test_playback.py` is opt-in because it plays sound through the default
+output (`SPLEDIO_AUDIO_TEST=1`). It passed in the run above. Real-device playback was also checked in the
+real-app run below.
 
 | File | Tests | What it covers |
 |---|---:|---|
-| `test_audio_io.py` | 103 | import of every PCM/float subtype and container libsndfile offers, channel counts, metadata, errors |
-| `test_export.py` | 80 | WAV/FLAC subtypes, dither, clipping policies, SRC, overwrite protection, export == mix |
-| `test_core_dsp.py` | 74 | STFT perfect reconstruction, selective gain accuracy, untouched samples bit-identical, selections, feather, resonance finder (incl. a ring that lasts only part of the file) |
+| `test_audio_io.py` | 106 | import of every PCM/float subtype and container libsndfile offers, MP3 / Ogg Vorbis / Opus decoded whole and repeatably (libsndfile's MP3 decoder is wrong when read in pieces), an MP3 without length information refused instead of cut short, channel counts, metadata, errors |
+| `test_export.py` | 84 | WAV/FLAC subtypes, dither (skipped when no sample needs rounding, so an unedited file at its own depth is bit-identical), clipping policies, SRC, overwrite protection, export == mix |
+| `test_core_dsp.py` | 78 | STFT perfect reconstruction, selective gain accuracy, untouched samples bit-identical, selections, feather, a selection that reaches the file start or end is edited right up to the edge, resonance finder (incl. a ring that lasts only part of the file) |
 | `test_playback.py` | 36 | transport, loop, audition modes, A/B, device loss, latency compensation (fake device) |
 | `test_ui_panels.py` | 28 | every dock panel builds, buttons map to registered actions |
 | `test_rendering.py` | 25 | tiled spectrogram, caching, colour maps, display never changes audio, edited tiles keep their previous image until recomputed (no blinking) |
-| `test_session.py` | 22 | save/reopen bit-exact, portable projects, relink with SHA-256, malicious archives rejected, autosave/recovery |
+| `test_session.py` | 52 | save/reopen bit-exact, portable projects, relink with SHA-256, saving after the source file changed on disk, malicious archives rejected (incl. compressed members and undrawable selection shapes), autosave/recovery, unsaved mark kept after the oldest undo step is dropped, extract keeps the mix with layer gain / polarity / mute / solo, A/B and Difference after an area change and over every part of a multi-part edit, the transfer brush keeps the mix at any layer level / polarity and refuses a move between an audible and a muted layer, Delete/Crop Time use the drawn span, not the feather, undoing a time edit brings back the selection |
 | `test_ui_canvas.py` | 20 | canvas tools, selection drawing, zoom/pan, crosshair |
 | `test_ui_modules.py` | 12 | Preview / Bypass / Apply / Cancel through the Edit panel, tutorials |
 | `test_areas.py` | 11 | adjusted areas: 1 dB / 6 dB step sequence, silence and back is exact, independent and overlapping areas, merge of rapid presses into one undo step (counted from the key press, so a slow render does not split them), locked layer, removed area refused, save/reopen, timeline freeze + undo |
-| `test_memory.py` | 33 | long-file memory without changing samples: float32 component == float64 component rounded once, in-place gain == whole-region render, one stored undo copy per edit (swap), merged key presses add no undo memory, unused area components freed, difference of an older edit exact, spill to disk and back, block-rendered mix/export == whole render, adopted playback buffer, RAM-sized budgets, area components stay in RAM, block-wise clip peak == whole-region peak (NaN kept), in-place swap in RAM and on disk (also interrupted, and for another dtype) |
-| `test_ui_areas.py` | 4 | real main window: ↑/↓/+/−/Shift/0 keys, click-to-pick, Delete removes, Highlight toggle, Areas panel, level bar (− / + / slider / Silence / ✕, placement, no busy flash, actions not left disabled), zoom shortcuts |
-| `test_ui_workflow.py` | 4 | real main window, core resonance workflow end to end, every enabled action triggered once without error, `--smoke-test` mode passes |
+| `test_memory.py` | 34 | long-file memory without changing samples: float32 component == float64 component rounded once, in-place gain == whole-region render, one stored undo copy per edit (swap), merged key presses add no undo memory, unused area components freed, A/B and Difference rebuild the state before the edit exactly from the one stored copy (one-channel edit, after undo/redo, copy on disk, area change), spill to disk and back, block-rendered mix/export == whole render, adopted playback buffer, RAM-sized budgets, area components stay in RAM, block-wise clip peak == whole-region peak (NaN kept), in-place swap in RAM and on disk (also interrupted, and for another dtype) |
+| `test_ui_areas.py` | 8 | real main window: ↑/↓/+/−/Shift/0 keys, click-to-pick, Delete removes, Show / Hide areas (bar under the spectrogram, Shift+H, Areas panel stay in step), level bar (− / + / slider / Silence / ✕, placement, no busy flash, actions not left disabled), zoom shortcuts, zoom buttons fully readable at 1440 and 1024 px and zooming, trackpad pinch |
+| `test_ui_workflow.py` | 15 | real main window, core resonance workflow end to end, a 3- and 6-channel file plays folded to a stereo output, the Channels scope applied to the selection on the GUI thread (edit, preview, mute, audition, area), every enabled action triggered once without error, `--smoke-test` mode passes and reports a refused file at once, an MP3 opened (File ▸ Open lists MP3/OGG/Opus), edited, saved and reopened, the time readout showing the new file's length at once, no leftover panel tab bars over the panels, always dark |
 
 UI tests run headless (`QT_QPA_PLATFORM=offscreen`) against the real `MainWindow` with a fake audio device
 whose output buffer is pulled and measured.
@@ -139,7 +145,7 @@ Developer ID". Details in
 from 30 s), exports the mix as 32-bit float WAV through the window's export job, opens the export
 dialog, and undoes the area. A thread reads the process's memory footprint (`phys_footprint`, what
 Activity Monitor shows as Memory) every 5 ms. **Before** is Spledio 1.1 (commit `60009fc`), **after**
-is commit `1a3edd0`; both ran on this Mac (24 GB RAM, so both use a 512 MB tile cache and a 768 MB undo
+is this branch with `main` at `64b8cf0` merged in (the code of the merge commit); both ran on this Mac (24 GB RAM, so both use a 512 MB tile cache and a 768 MB undo
 budget). Every run also checked that the exported file equals the playback mix sample for sample and
 that undo restores the layer bit-exactly; all passed.
 
@@ -148,28 +154,32 @@ Peak memory footprint in GB:
 | File / area | Version | Open | Area applied | Export | Undo |
 |---|---|---|---|---|---|
 | 10 min / 5 min | before | 1.47 | 2.53 | 2.53 | 2.06 |
-| | after | 0.78 | 1.30 | 1.30 | 1.31 |
+| | after | 0.80 | 1.30 | 0.94 | 1.24 |
 | 30 min / 25 min | before | 3.68 | 6.26 | 5.08 | 5.86 |
-| | after | 1.64 | 3.48 | 3.48 | 3.49 |
+| | after | 1.65 | 3.43 | 2.74 | 2.84 |
 | 60 min / 50 min | before | 7.05 | 11.75 | 7.39 | 11.04 |
-| | after | 2.87 | 6.26 | 3.97 | 5.28 |
+| | after | 2.89 | 6.11 | 3.97 | 5.27 |
 
-The export peak includes what was already in use when the export started; the new export itself adds
-nothing measurable (the mix is rendered in blocks). With the budgets of an 8 GB Mac (256 MB tile cache,
-512 MB undo; set with `MEMPROF_RAM_GB=8` on this Mac) the new code measured: 30 min / 25 min: 1.64 /
-3.49 / 3.49 / 2.80; 60 min / 50 min: 2.89 / 6.38 / 3.97 / 5.27.
+The export and undo peaks include what was still in use when they started; the new export itself adds
+nothing measurable (the mix is rendered in blocks). That starting level depends on when macOS takes
+back freed memory, so these two vary most: the same steps on the branch before the merge (commit
+`1a3edd0`) gave 1.30 / 1.31 at 10 min, 3.48 / 3.49 at 30 min and 3.97 / 5.28 at 60 min, with open and
+area within 0.15 GB of the table. With the budgets of an 8 GB Mac (256 MB tile cache, 512 MB undo; set
+with `MEMPROF_RAM_GB=8` on this Mac) the merged code measured: 30 min / 25 min: 1.66 / 3.50 / 2.04 /
+2.83; 60 min / 50 min: 2.92 / 6.45 / 3.91 / 5.30.
 
-What stays in use: after the 50-minute area the footprint settled at 3.96 GB, which is the layer
+What stays in use: after the 50-minute area the footprint settled at 3.96 GB (before and after the merge), which is the layer
 (1.27 GB), the float32 playback mix (1.27 GB), the area's component (1.06 GB) and the app itself; the
 undo copy of the span is on disk. A `--tracemalloc` run (10 min) found only these arrays alive after
 the area, plus the one undo copy that fits in RAM. Values read 3 s after a phase vary between runs,
 because macOS takes freed memory back lazily: the same 30-minute area settled at 3.46 GB in one run and
-at 2.03 GB in another, with peaks of 3.46 and 3.47 GB. The peaks repeat within about 0.2 GB.
+at 2.03 GB in another, with peaks of 3.46 and 3.47 GB. Open and area peaks repeat within about 0.2 GB.
 
 Not measured: a visible window, playback while editing, files with several layers, 48 kHz files
 (arrays about 9 % larger than at 44.1 kHz), and a real 8 GB Mac.
 
-The full suite on commit `1a3edd0`, with `SPLEDIO_AUDIO_TEST=1`: **459 passed**, nothing skipped.
+The full suite on the merged code, with `SPLEDIO_AUDIO_TEST=1`: **516 passed**, nothing skipped (on the
+branch before the merge, commit `1a3edd0`: 459 passed).
 
 ## Not tested
 

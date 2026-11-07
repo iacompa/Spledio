@@ -59,7 +59,7 @@ class ViewState(QObject):
         self.show_overview = True
         self.show_waveform = True
         self.show_mask_overlay = True
-        self.show_areas = True  # outline + label every adjusted area ("Highlight" toggle)
+        self.show_areas = True  # outline + label every adjusted area (Show / Hide under the spectrogram, Shift+H)
         self.display_config = STFTConfig(4096, 1024, "hann")
         self.channel_mode = "mix"  # 'mix' | 'ch0' | 'ch1' ...
         self.layer_display = "composite"  # 'composite' | 'active'

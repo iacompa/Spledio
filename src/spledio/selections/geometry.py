@@ -331,20 +331,46 @@ def _num(v) -> float:
     return x
 
 
+def _finite(v) -> float:
+    x = _num(v)
+    if not math.isfinite(x):
+        raise ValueError(f"bad number {v!r}")
+    return x
+
+
+def _radius(v) -> float:
+    """A brush radius: finite and > 0 (stamp spacing divides by it)."""
+    x = _finite(v)
+    if x <= 0.0:
+        raise ValueError(f"brush radius must be positive, got {x!r}")
+    return x
+
+
 def shape_from_dict(d: dict) -> Shape:
+    """Shape from :meth:`Shape.to_dict` output. Raises ``ValueError`` for anything the editor
+    cannot draw (non-finite coordinates, a polygon with fewer than 3 points, an empty brush or one
+    of radius 0, a negative ellipse), so a damaged project fails to open instead of failing every
+    redraw."""
     kind = d.get("kind")
     if kind == "rect":
         return RectShape(_num(d["t0"]), _num(d["t1"]), _num(d["f0"]), _num(d["f1"]))
     if kind == "ellipse":
-        return EllipseShape(_num(d["tc"]), _num(d["fc"]), _num(d["rt"]), _num(d["rf"]))
+        rt, rf = _finite(d["rt"]), _finite(d["rf"])
+        if rt < 0.0 or rf < 0.0:
+            raise ValueError("ellipse radius must not be negative")
+        return EllipseShape(_finite(d["tc"]), _finite(d["fc"]), rt, rf)
     if kind == "polygon":
-        pts = tuple((_num(a), _num(b)) for a, b in d["points"])
+        pts = tuple((_finite(a), _finite(b)) for a, b in d["points"])
         if len(pts) > 100_000:
             raise ValueError("polygon too large")
+        if len(pts) < 3:
+            raise ValueError("a polygon needs at least 3 points")
         return PolygonShape(pts)
     if kind == "brush":
-        pts = tuple((_num(a), _num(b)) for a, b in d["path"])
+        pts = tuple((_finite(a), _finite(b)) for a, b in d["path"])
         if len(pts) > 100_000:
             raise ValueError("brush path too large")
-        return BrushShape(pts, _num(d["rt"]), _num(d["rf"]), _num(d["hardness"]), bool(d.get("square", False)))
+        if not pts:
+            raise ValueError("empty brush stroke")
+        return BrushShape(pts, _radius(d["rt"]), _radius(d["rf"]), _finite(d["hardness"]), bool(d.get("square", False)))
     raise ValueError(f"unknown shape kind {kind!r}")

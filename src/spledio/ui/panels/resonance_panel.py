@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from spledio.audio.io import IMPORT_FILE_PATTERNS
 from spledio.dsp.resonance import ResonanceCandidate, suggest_resonances
 from spledio.dsp.stft import STFTConfig
 from spledio.selections.geometry import RectShape
@@ -412,7 +413,7 @@ class ResonancePanel(QWidget):
 
     def _open_fallback(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open audio", "", "Audio files (*.wav *.flac *.aif *.aiff *.caf *.w64 *.rf64);;All files (*)")
+            self, "Open audio", "", f"Audio files ({IMPORT_FILE_PATTERNS});;All files (*)")
         if path:
             self.controller.open_audio(path)
 

@@ -31,7 +31,7 @@ Status legend:
 | Linear / logarithmic frequency scale, note labels | Implemented | |
 | Colour maps: ember, ice, grayscale, viridis-like, cividis-like | Implemented | last two approximate the published maps |
 | dB range, gamma, overlay opacity | Implemented | never affect audio |
-| Zoom/pan time & frequency, fit project / selection, overview strip | Implemented | |
+| Zoom/pan time & frequency, fit project / selection, overview strip | Implemented | zoom buttons in the bar under the spectrogram, ⌘/Ctrl+scroll, Shift+scroll, trackpad pinch. `test_ui_areas.py` |
 | Waveform strip, crosshair readout (time, Hz, note, dB) | Implemented | |
 | Channel view: mix / left / right / per channel | Implemented | |
 | Display active layer vs. composite of all layers | Implemented | |
@@ -61,12 +61,12 @@ Status legend:
 | Areas stay outlined with their level; click to pick and re-adjust; Delete removes the adjustment exactly | Implemented | overlapping areas removed in any order restore the original (tested) |
 | Level bar next to the selection: − / + (1 dB, hold to repeat), slider, ▶ play in mix, Silence, ✕ remove | Implemented | `test_ui_areas.py::test_level_bar_next_to_selection_buttons_and_slider`; checked in the real app |
 | No blinking while levels change (previous spectrogram kept until the new tiles are ready; quick jobs don't grey out the UI) | Implemented | `test_rendering.py::test_edit_keeps_previous_image_until_new_tiles_are_ready` |
-| "Highlight" toggle hides area outlines (picked area stays visible); Adjusted Areas panel | Implemented | display only |
+| Show / Hide buttons under the spectrogram (and Shift+H) hide area outlines (picked area stays visible); Adjusted Areas panel | Implemented | display only. `test_ui_areas.py` |
 | Areas saved in the project and re-adjustable after reopening | Implemented | `test_areas.py::test_areas_survive_save_and_reopen` |
 | Mute / delete spectral content | Implemented | ≥ 60 dB attenuation |
 | Preview / Bypass / A-B / Apply / Cancel workflow | Implemented | preview == commit == export (tested) |
 | Reduce brush / amplify brush | Implemented | one stroke = one undo |
-| Transfer brush (move painted content to another layer) | Implemented | sum preserved (tested) |
+| Transfer brush (move painted content to another layer) | Implemented | mix preserved at any layer level / polarity (tested); a move between an audible and a muted layer is refused |
 | Extract to new layer / copy to new layer | Implemented | extract conserves the sum to ~1e-16 |
 | Delete time / crop time / insert silence (ripples all layers) | Implemented | |
 | Processing resolution per edit (FFT size, hop, window) | Implemented | stored with each operation |
@@ -98,6 +98,7 @@ Status legend:
 | Choosing the output device inside the app | Not supported yet | plays through the system default output; change it in the OS sound settings |
 | Playhead latency compensation | Implemented | relies on the latency the driver reports |
 | Mono monitored on both speakers | Implemented | monitoring only, export stays mono |
+| More channels than the output has (e.g. 6 channels on stereo speakers) monitored as a stereo fold-down | Implemented | monitoring only, export keeps every channel; see KNOWN_LIMITATIONS.md |
 
 ## Export
 
@@ -108,7 +109,7 @@ Status legend:
 | AIFF, OGG, MP3, 32-bit int, 64-bit float export | Not supported yet | |
 | Mix / selected layers / stems / time range | Implemented | |
 | Sample-rate conversion on export | Implemented | polyphase, in memory |
-| TPDF dither, clipping policy (refuse / reduce level / limit / clip) | Implemented | |
+| TPDF dither, clipping policy (refuse / reduce level / limit / clip) | Implemented | dither skipped when no sample needs rounding (unedited same-depth export is bit-identical) |
 | Refuses to overwrite a source file; confirms other overwrites | Implemented | |
 
 ## AI / models

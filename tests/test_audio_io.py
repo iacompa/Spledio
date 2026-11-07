@@ -17,6 +17,7 @@ import pytest
 import soundfile as sf
 
 from spledio.audio.io import (
+    LOSSY_IMPORT_SUBTYPES,
     SUPPORTED_IMPORT_CONTAINERS,
     SUPPORTED_IMPORT_SUBTYPES,
     AudioFileInfo,
@@ -67,15 +68,15 @@ def _snapshot(path):
 
 
 def test_supported_containers_are_the_requested_set_and_available():
-    wanted = ("WAV", "WAVEX", "RF64", "W64", "FLAC", "AIFF", "CAF")
+    wanted = ("WAV", "WAVEX", "RF64", "W64", "FLAC", "AIFF", "CAF", "OGG", "MP3")
     available = sf.available_formats()
     assert SUPPORTED_IMPORT_CONTAINERS == tuple(c for c in wanted if c in available)
     # this build of libsndfile (1.2.2) provides all of them
     assert set(SUPPORTED_IMPORT_CONTAINERS) == set(wanted)
-    assert "MP3" not in SUPPORTED_IMPORT_CONTAINERS and "OGG" not in SUPPORTED_IMPORT_CONTAINERS
-    for s in ("PCM_16", "PCM_24", "PCM_32", "FLOAT", "DOUBLE"):
+    for s in ("PCM_16", "PCM_24", "PCM_32", "FLOAT", "DOUBLE", "VORBIS", "OPUS", "MPEG_LAYER_III"):
         assert s in SUPPORTED_IMPORT_SUBTYPES
-    for s in ("IMA_ADPCM", "MS_ADPCM", "GSM610", "VORBIS", "OPUS", "MPEG_LAYER_III"):
+    assert LOSSY_IMPORT_SUBTYPES == {"VORBIS", "OPUS", "MPEG_LAYER_I", "MPEG_LAYER_II", "MPEG_LAYER_III"}
+    for s in ("IMA_ADPCM", "MS_ADPCM", "GSM610"):
         assert s not in SUPPORTED_IMPORT_SUBTYPES
 
 
@@ -325,9 +326,6 @@ def test_unusual_rates_written_by_libsndfile(tmp_path):
 
 
 @pytest.mark.parametrize("fmt,subtype,match", [
-    ("OGG", "VORBIS", "compressed format OGG is not supported by the core importer yet"),
-    ("OGG", "OPUS", "compressed format OGG is not supported by the core importer yet"),
-    ("MP3", "MPEG_LAYER_III", "compressed format MP3 is not supported by the core importer yet"),
     ("WAV", "IMA_ADPCM", "compressed encoding IMA_ADPCM"),
     ("WAV", "GSM610", "compressed encoding GSM610"),
     ("AU", "PCM_16", "container is not supported"),
@@ -459,3 +457,79 @@ def test_pathlike_bytes_and_str_paths(tmp_path):
     assert probe_audio(os.fsencode(str(p))) == a
     with pytest.raises(AudioImportError):
         probe_audio(12.5)
+
+
+# ----------------------------------------------------------------- lossy imports (MP3, Ogg Vorbis, Opus)
+
+
+def _tone(channels, frames, rate):
+    t = np.arange(frames) / rate
+    return np.stack([0.4 * np.sin(2 * np.pi * (440 + 110 * c) * t) for c in range(channels)])
+
+
+@pytest.mark.parametrize("fmt,subtype,rate,channels,ext", [
+    ("MP3", "MPEG_LAYER_III", 44100, 2, "mp3"),
+    ("MP3", "MPEG_LAYER_III", 22050, 1, "mp3"),  # MPEG-2 layer III: 576 samples per frame
+    ("OGG", "VORBIS", 44100, 2, "ogg"),
+    ("OGG", "OPUS", 48000, 2, "opus"),
+])
+def test_lossy_formats_import_whole_and_repeatably(tmp_path, fmt, subtype, rate, channels, ext):
+    frames = 3 * rate + 123
+    path = tmp_path / f"lossy.{ext}"
+    sf.write(str(path), _tone(channels, frames, rate).T, rate, format=fmt, subtype=subtype)
+    info = probe_audio(path)
+    assert info.lossy and info.subtype == subtype and info.sample_rate == rate and info.channels == channels
+    x, got = load_audio(path)
+    y, _ = load_audio(path)
+    assert x.dtype == np.float32 and x.shape == (channels, got.frames)
+    assert abs(got.frames - frames) <= 2304  # whole stream, not cut at an estimate
+    assert np.array_equal(x, y)  # the same file always decodes to the same samples
+    # one whole read is what libsndfile decodes correctly (its MP3 decoder garbles piecewise reads)
+    whole = sf.read(str(path), dtype="float32", always_2d=True)[0].T
+    assert np.allclose(x, whole, rtol=0, atol=1e-6)  # last-bit rounding only; piecewise errors reach 0.4
+    blk = read_block(path, rate, 1000)
+    assert np.array_equal(blk, x[:, rate : rate + 1000])
+    # it is the tone that was written (lossy, so only close), not noise or silence
+    ref = _tone(channels, frames, rate)
+    n = min(frames, got.frames)
+    a = slice(rate // 2, n - rate // 2)
+    lag = int(np.argmax(np.correlate(x[0, a][:4000], ref[0, a][:4000], "full"))) - 3999
+    assert abs(lag) < 2000
+    assert np.corrcoef(x[0, a.start + max(lag, 0): a.stop], ref[0, a.start: a.stop - max(lag, 0)])[0, 1] > 0.95
+
+
+def test_mp3_without_length_header_is_refused_not_cut(tmp_path):
+    from spledio.audio.io import _mpeg_stream_samples
+
+    rate = 44100
+    path = tmp_path / "vbr.mp3"
+    sf.write(str(path), _tone(2, 10 * rate, rate).T, rate, format="MP3", subtype="MPEG_LAYER_III")
+    raw = path.read_bytes()
+    counted, spf = _mpeg_stream_samples(str(path))
+    assert spf == 1152 and 10 * rate <= counted <= 10 * rate + 3 * spf
+    # drop the first frame, which carries the Xing/Info length tag: libsndfile then only estimates
+    tag = max(raw.find(b"Xing"), raw.find(b"Info"))
+    assert tag > 0
+    start = max(i for i in range(tag) if raw[i] == 0xFF and raw[i + 1] & 0xE0 == 0xE0)
+    nxt = next(i for i in range(tag, len(raw) - 1) if raw[i] == 0xFF and raw[i + 1] & 0xE0 == 0xE0)
+    cut = tmp_path / "no-length.mp3"
+    cut.write_bytes(raw[:start] + raw[nxt:])
+    if probe_audio(cut).frames >= 10 * rate - 2 * spf - 2304:
+        pytest.skip("this libsndfile estimates the length correctly without the tag")
+    with pytest.raises(AudioImportError, match="no length information"):
+        load_audio(cut)
+
+
+def test_mpeg_frame_walk_skips_id3_tags(tmp_path):
+    from spledio.audio.io import _mpeg_stream_samples
+
+    path = tmp_path / "t.mp3"
+    sf.write(str(path), _tone(1, 44100, 44100).T, 44100, format="MP3", subtype="MPEG_LAYER_III")
+    plain = _mpeg_stream_samples(str(path))
+    body = path.read_bytes()
+    id3v2 = b"ID3\x04\x00\x00" + bytes([0, 0, 1, 0]) + b"\x00" * 128  # 128-byte tag (synchsafe size)
+    id3v1 = b"TAG" + b"\x00" * 125
+    tagged = tmp_path / "tagged.mp3"
+    tagged.write_bytes(id3v2 + body + id3v1)
+    assert _mpeg_stream_samples(str(tagged)) == plain
+    assert load_audio(tagged)[0].shape == load_audio(path)[0].shape

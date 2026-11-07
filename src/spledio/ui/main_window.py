@@ -21,12 +21,14 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QScrollArea,
     QSlider,
+    QTabBar,
     QToolBar,
     QToolButton,
     QWidget,
 )
 
 from spledio import __version__
+from spledio.audio.io import IMPORT_FILE_PATTERNS
 from spledio.branding import APP_NAME, APP_ORG, APP_TAGLINE, APP_WORKING_TITLE, PROJECT_EXTENSION
 from spledio.engine.session import EditError, channel_scope_label
 from spledio.persistence.project_file import AssetMismatchError, MissingMediaError, ProjectFormatError
@@ -37,7 +39,7 @@ from spledio.ui.state import TOOLS
 CANVAS_KEY_ACTIONS = ("area.louder", "area.quieter", "area.louder_big", "area.quieter_big", "area.silence",
                       "area.next", "area.prev")
 
-AUDIO_FILTER = "Audio files (*.wav *.wave *.flac *.aif *.aiff *.aifc *.caf *.w64 *.rf64);;All files (*)"
+AUDIO_FILTER = f"Audio files ({IMPORT_FILE_PATTERNS});;All files (*)"
 PROJECT_FILTER = f"{APP_NAME} project (*{PROJECT_EXTENSION})"
 
 
@@ -198,7 +200,7 @@ class MainWindow(QMainWindow):
         A = self.actions.add
         c = self.ctl
         # ---- File
-        A(ActionSpec("file.open_audio", "Open Audio…", "Open a WAV/FLAC/AIFF file (the source file is never modified)",
+        A(ActionSpec("file.open_audio", "Open Audio…", "Open a WAV, FLAC, AIFF, MP3 or OGG file (the source file is never modified)",
                      self.open_audio_dialog, "File", "Ctrl+O", "open", acts_on="new project", toolbar="file"))
         A(ActionSpec("file.open_project", "Open Project…", f"Open a saved {APP_NAME} project", self.open_project_dialog,
                      "File", "Ctrl+Shift+O", "open", acts_on="project file"))
@@ -236,7 +238,7 @@ class MainWindow(QMainWindow):
                      c.delete_or_remove, "Edit", ("Delete", "Backspace"), "delete", self._need_area_target,
                      changes_audio=True, undoable=True, acts_on="selection / picked area", text_safe=False))
         A(ActionSpec("edit.extract", "Extract to New Layer",
-                     "Move the selected content to a new aligned layer; remainder + extract = original at unity gain",
+                     "Move the selected content to a new aligned layer at the same level; remainder + extract = original",
                      lambda: c.extract(False), "Edit", "Ctrl+J", "extract", self._need_editable_sel, changes_audio=True,
                      undoable=True, acts_on="selection → new layer"))
         A(ActionSpec("edit.copy_to_layer", "Copy to New Layer",
@@ -275,10 +277,11 @@ class MainWindow(QMainWindow):
                      "Edit/Adjusted Areas", "]", "", self._need_any_area))
         A(ActionSpec("area.prev", "Pick Previous Area", "Select the previous adjusted area", lambda: self._cycle_area(-1),
                      "Edit/Adjusted Areas", "[", "", self._need_any_area))
-        A(ActionSpec("view.show_areas", "Highlight", "Show every adjusted area outlined with its level (display only). "
-                     "Turn off to hide them when there are many", lambda on: self.ctl.view.set_display(show_areas=on),
-                     "View", "Shift+H", "", None, checkable=True, checked=lambda: self.ctl.view.show_areas,
-                     toolbar="edit"))
+        A(ActionSpec("view.show_areas", "Show Adjusted Areas", "Outline every part you turned up, down or silenced, "
+                     "with its level (display only). Turn off to hide them; the picked area stays outlined. "
+                     "Also the Show / Hide buttons under the spectrogram",
+                     lambda on: self.ctl.view.set_display(show_areas=on),
+                     "View", "Shift+H", "", None, checkable=True, checked=lambda: self.ctl.view.show_areas))
         # ---- Module (preview / bypass / apply / cancel)
         A(ActionSpec("module.preview", "Preview", "Render the gain edit without applying it, then play it", lambda: c.preview_gain(c.tools.gain_db),
                      "Edit/Module", "P", "preview", self._need_editable_sel, acts_on="selection", text_safe=False))
@@ -451,7 +454,11 @@ class MainWindow(QMainWindow):
     def _build_central(self):
         from spledio.ui.spectrogram_view import SpectrogramEditor
 
+        from spledio.ui.view_bar import ViewBar
+
         self.editor = SpectrogramEditor(self.ctl, self)
+        self.view_bar = ViewBar(self.ctl, self.actions, self.editor)  # zoom −/+ and Show/Hide areas, always in view
+        self.editor.set_bottom_bar(self.view_bar)
         self.setCentralWidget(self.editor)
         # Arrow keys / + − / 0 / [ ] act on the spectrogram only while it has keyboard focus, so lists,
         # spin boxes and text fields keep their own arrow keys.
@@ -962,9 +969,11 @@ class MainWindow(QMainWindow):
 
     def delete_time(self):
         s = self.ctl.session
-        b = s.selection.bounds(s.project.duration, s.project.nyquist)
+        a, e = self.ctl.safe(s.time_range_samples) or (None, None)
+        if a is None:
+            return
         r = QMessageBox.warning(self, "Delete time",
-                                f"Remove {b[0]:.3f}–{b[1]:.3f} s from ALL {len(s.project.layers)} layer(s)?\n\n"
+                                f"Remove {a / s.sample_rate:.3f}–{e / s.sample_rate:.3f} s from ALL {len(s.project.layers)} layer(s)?\n\n"
                                 "This SHORTENS the recording (unlike Delete Spectral Content). All layers are rippled together "
                                 "to stay in sync. Undo restores it.", QMessageBox.Ok | QMessageBox.Cancel)
         if r == QMessageBox.Ok:
@@ -1057,7 +1066,33 @@ class MainWindow(QMainWindow):
         elif not on and self._focus_saved is not None:
             self.restoreState(self._focus_saved)
             self._focus_saved = None
+            QTimer.singleShot(0, self._hide_stale_tab_bars)
         self.actions.refresh()
+
+    def _hide_stale_tab_bars(self) -> None:
+        """Work around a Qt 6 bug: tabifyDockWidget and every restoreState leave the tab bars of the
+        previous dock layout on screen, drawn over the panels at their old place (a loose
+        "Resonance Workflow" tab over the Reduce panel's buttons). Hide every dock tab bar, then
+        lay the window out again: Qt shows again exactly the bars it uses."""
+        bars = [tb for tb in self.findChildren(QTabBar, options=Qt.FindChildOption.FindDirectChildrenOnly)
+                if tb.isVisible()]
+        if not bars:
+            return
+        for tb in bars:
+            tb.hide()
+        lay = self.layout()
+        lay.activate()  # finish any pending relayout first: until then geometry() is empty
+        r = lay.geometry()
+        if r.isValid() and not r.isEmpty():
+            lay.setGeometry(r)  # same size, so the panels keep their widths
+        else:
+            lay.invalidate()  # the relayout this asks for shows the bars Qt uses
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        if not getattr(self, "_shown_once", False):
+            self._shown_once = True  # the saved layout was restored before the first show
+            QTimer.singleShot(0, self._hide_stale_tab_bars)
 
     def _restore_layout(self):
         st = self.settings.value("window_state")

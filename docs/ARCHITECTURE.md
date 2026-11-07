@@ -74,6 +74,9 @@ independent and never reinterpret committed edits.
 * Worker pool (`concurrent.futures.ThreadPoolExecutor`): spectrogram tiles,
   edit/preview/audition renders, export. Results are handed back to the GUI
   thread via Qt signals. NumPy / scipy.fft release the GIL for heavy work.
+  A job never changes the selection: anything it needs from the selection
+  (such as the Channels scope) is set on the GUI thread by
+  `EditorController.run_job(prepare=...)` before the job starts.
 * PortAudio callback: copies from a pre-rendered, immutable buffer
   (`PlaybackSource.read_into`) into the output, applies monitor volume and a
   pre-computed crossfade ramp. No FFT, file I/O, locks, GUI calls or large

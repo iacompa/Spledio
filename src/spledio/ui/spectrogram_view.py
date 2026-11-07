@@ -357,7 +357,7 @@ def selection_overlay_values(sel: Selection, cfg, sample_rate: float, n_samples:
         return np.ascontiguousarray(vals, dtype=np.float32), "raster"
     uk, kinv = np.unique(k_cols[cols], return_inverse=True)
     ub, binv = np.unique(b_rows[rows], return_inverse=True)
-    vals = rasterize_on(sel, uk * (cfg.hop / sr), ub * (sr / cfg.n_fft))  # (len(uk), len(ub))
+    vals = rasterize_on(sel, np.clip(uk * (cfg.hop / sr), 0.0, n_samples / sr), ub * (sr / cfg.n_fft))  # (len(uk), len(ub))
     out[np.ix_(rows, cols)] = vals[np.ix_(kinv, binv)].T.astype(np.float32)
     return out, "lod"
 
@@ -1612,6 +1612,8 @@ class SpectrogramCanvas(QWidget):
         e.accept()
 
     def event(self, e) -> bool:
+        if e.type() == QEvent.Type.NativeGesture and self._native_zoom(e):
+            return True
         # let Esc / Enter / Backspace reach keyPressEvent instead of window shortcuts
         # while (and only while) a gesture or polygon is in progress
         if e.type() == QEvent.Type.ShortcutOverride and self.interaction_in_progress():
@@ -1619,6 +1621,17 @@ class SpectrogramCanvas(QWidget):
                 e.accept()
                 return True
         return super().event(e)
+
+    def _native_zoom(self, e) -> bool:
+        """Trackpad pinch: zoom time around the pointer (spread = zoom in). Display only."""
+        if e.gestureType() != Qt.NativeGestureType.ZoomNativeGesture or self.controller.session is None:
+            return False
+        d = float(e.value())  # relative scale change of this step, + = fingers spreading
+        if d and d > -0.95:
+            g = self.view_geometry()
+            self.controller.view.zoom_time(1.0 / (1.0 + d), anchor_t=float(g.t_of_x(e.position().x())))
+        e.accept()
+        return True
 
     def keyPressEvent(self, e) -> None:
         k = e.key()
@@ -1718,7 +1731,7 @@ class SpectrogramEditor(QWidget):
         self._syncing = False
         self._units = 1000.0
 
-        grid = QGridLayout(self)
+        grid = self._grid = QGridLayout(self)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(0)
         grid.addWidget(self.overview, 0, 1)
@@ -1746,6 +1759,11 @@ class SpectrogramEditor(QWidget):
         self._sync_all()
 
     # --------------------------------------------------------------- public API
+    def set_bottom_bar(self, bar: QWidget) -> None:
+        """Put ``bar`` (the zoom / show-areas bar) across the bottom, under the scroll bar."""
+        self._grid.addWidget(bar, 5, 0, 1, 2)
+        self.bottom_bar = bar
+
     def cancel_interaction(self) -> bool:
         return self.canvas.cancel_interaction()
 

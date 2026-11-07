@@ -9,7 +9,7 @@ Disabled actions show the reason in their tooltip and in the status bar.
 
 | Action | Shortcut | What it does | Acts on | Changes audio | Undoable | Disabled when | Status |
 |---|---|---|---|---|---|---|---|
-| **Open Audio…** `file.open_audio` | Ctrl+O | Open a WAV/FLAC/AIFF file (the source file is never modified) | new project | no | no | Always available | implemented |
+| **Open Audio…** `file.open_audio` | Ctrl+O | Open a WAV, FLAC, AIFF, MP3 or OGG file (the source file is never modified) | new project | no | no | Always available | implemented |
 | **Open Project…** `file.open_project` | Ctrl+Shift+O | Open a saved Spledio project | project file | no | no | Always available | implemented |
 | **Save Project** `file.save` | Ctrl+S | Save the editable project (layers, edits, selection), not a flattened WAV | project | no | no | No project open, or an operation is running | implemented |
 | **Save Project As…** `file.save_as` | Ctrl+Shift+S | Save the project to a new file | project | no | no | No project open, or an operation is running | implemented |
@@ -43,7 +43,7 @@ Disabled actions show the reason in their tooltip and in the status bar.
         if lay is None:
             return ; 
         return f | implemented |
-| **Extract to New Layer** `edit.extract` | Ctrl+J | Move the selected content to a new aligned layer; remainder + extract = original at unity gain | selection → new layer | yes | yes | No selection, active layer locked, busy, or no project | implemented |
+| **Extract to New Layer** `edit.extract` | Ctrl+J | Move the selected content to a new aligned layer at the same level; remainder + extract = original | selection → new layer | yes | yes | No selection, active layer locked, busy, or no project | implemented |
 | **Copy to New Layer** `edit.copy_to_layer` | Ctrl+Shift+J | Duplicate the selected content into a new layer (the summed level can increase) | selection → new layer | yes | yes | No selection (or busy / no project) | implemented |
 | **Delete Time (shortens project)…** `edit.delete_time` | Ctrl+Alt+Del | Remove the selection's time span from ALL layers. This shortens the recording | all layers | yes | yes | No selection (or busy / no project) | implemented |
 | **Crop Time to Selection…** `edit.crop_time` | — | Keep only the selection's time span in ALL layers | all layers | yes | yes | No selection (or busy / no project) | implemented |
@@ -121,7 +121,7 @@ Disabled actions show the reason in their tooltip and in the status bar.
 
 | Action | Shortcut | What it does | Acts on | Changes audio | Undoable | Disabled when | Status |
 |---|---|---|---|---|---|---|---|
-| **Highlight** `view.show_areas` | Shift+H | Show every adjusted area outlined with its level (display only). Turn off to hide them when there are many | view | no | no | Always available | implemented |
+| **Show Adjusted Areas** `view.show_areas` | Shift+H | Outline every part you turned up, down or silenced, with its level (display only). Turn off to hide them; the picked area stays outlined. Also the Show / Hide buttons under the spectrogram | view | no | no | Always available | implemented |
 | **Zoom In (time)** `view.zoom_in` | Ctrl+= / Ctrl++ | Zoom in around the playhead/centre | view | no | no | No audio/project open | implemented |
 | **Zoom Out (time)** `view.zoom_out` | Ctrl+- | Zoom out | view | no | no | No audio/project open | implemented |
 | **Zoom In (frequency)** `view.zoom_in_freq` | Ctrl+Shift+Up | Zoom in vertically around the centre | view | no | no | No audio/project open | implemented |

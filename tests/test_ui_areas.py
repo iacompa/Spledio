@@ -1,5 +1,6 @@
 """Adjusted areas through the real main window: arrow / +/− keys on the spectrogram, click an
-area to pick it again, Delete removes its adjustment, Highlight toggle, Areas panel."""
+area to pick it again, Delete removes its adjustment, Show / Hide areas, Areas panel, and the zoom
+bar under the spectrogram."""
 
 from __future__ import annotations
 
@@ -225,3 +226,116 @@ def test_zoom_moved_to_ctrl_and_plus_minus_need_a_selection(qtbot, win):
     assert "Select something" in w.actions["area.louder"].statusTip()
     sc = [k.toString() for k in w.actions["view.zoom_in"].shortcuts()]
     assert "+" not in sc and "=" not in sc
+
+
+def _visible_in_window(w, b) -> bool:
+    """On screen, inside the window, and wide enough for its whole text (no "Who…ile")."""
+    if not b.isVisible() or b.width() < b.sizeHint().width():
+        return False
+    tl = b.mapTo(w, QPoint(0, 0))
+    return 0 <= tl.x() and tl.x() + b.width() <= w.width() and 0 <= tl.y() and tl.y() + b.height() <= w.height()
+
+
+@pytest.mark.parametrize("width", [1440, 1024])
+def test_view_bar_zoom_buttons_are_on_screen_and_zoom(qtbot, win, width):
+    """The zoom buttons sit in the bar under the spectrogram, fully on screen even in a narrow
+    window (the toolbar ones used to fall into the overflow menu), and they zoom."""
+    w = win
+    w.resize(width, 760)
+    qtbot.wait(50)
+    w.refresh_actions()
+    bar, v, dur = w.view_bar, w.ctl.view, w.ctl.session.project.duration
+    for aid in ("view.zoom_out", "view.zoom_in", "view.zoom_out_freq", "view.zoom_in_freq", "view.fit_project"):
+        assert _visible_in_window(w, bar.buttons[aid]), aid
+    assert _visible_in_window(w, bar.show_btn) and _visible_in_window(w, bar.hide_btn)
+    assert _visible_in_window(w, bar.areas_label)
+    assert bar.compact == (width < 1100)  # narrow: Selection is left out, the rest stays readable
+    assert bar.buttons["view.fit_selection"].isVisible() == (not bar.compact)
+    assert bar.mapTo(w.editor, QPoint(0, 0)).y() > w.editor.canvas.mapTo(w.editor, QPoint(0, 0)).y()  # under it
+
+    assert v.t1 - v.t0 == pytest.approx(dur)
+    audio = w.ctl.session.project.layers[0].audio.copy()
+    QTest.mouseClick(bar.buttons["view.zoom_in"], Qt.MouseButton.LeftButton)
+    assert v.t1 - v.t0 == pytest.approx(dur / 2)
+    QTest.mouseClick(bar.buttons["view.zoom_out"], Qt.MouseButton.LeftButton)
+    assert v.t1 - v.t0 == pytest.approx(dur)
+    f_span = v.f_hi - v.f_lo
+    QTest.mouseClick(bar.buttons["view.zoom_in_freq"], Qt.MouseButton.LeftButton)
+    assert v.f_hi - v.f_lo == pytest.approx(f_span / 2, rel=0.02)
+    QTest.mouseClick(bar.buttons["view.zoom_in"], Qt.MouseButton.LeftButton)
+    QTest.mouseClick(bar.buttons["view.fit_project"], Qt.MouseButton.LeftButton)
+    assert v.t1 - v.t0 == pytest.approx(dur) and v.f_hi - v.f_lo == pytest.approx(f_span, rel=0.02)
+    assert np.array_equal(w.ctl.session.project.layers[0].audio, audio)  # display only
+    assert w.editor.canvas.hasFocus() or not bar.buttons["view.zoom_in"].hasFocus()  # buttons never take the keys
+
+    # Selection is enabled once there is a selection, and zooms to it
+    if bar.compact:
+        return
+    w.ctl.session.clear_selection()
+    w.refresh_actions()
+    assert not bar.buttons["view.fit_selection"].isEnabled()
+    w.ctl.commit_selection_shape(RectShape(1.0, 2.0, 2000, 3000))
+    w.refresh_actions()
+    assert bar.buttons["view.fit_selection"].isEnabled()
+    QTest.mouseClick(bar.buttons["view.fit_selection"], Qt.MouseButton.LeftButton)
+    assert v.t0 >= 0.9 and v.t1 <= 2.1
+
+
+def test_view_bar_show_hide_areas(qtbot, win):
+    w = win
+    s = w.ctl.session
+    bar = w.view_bar
+    panel = w.docks["areas"].widget().widget()
+    assert bar.areas_label.text() == "Adjusted areas"
+    w.ctl.commit_selection_shape(RectShape(0.5, 3.5, 2300, 2700))
+    _keys(qtbot, w, Qt.Key.Key_Down)
+    w.ctl.commit_selection_shape(RectShape(1.0, 2.0, 5700, 6300))
+    _keys(qtbot, w, Qt.Key.Key_0)  # silenced
+    assert bar.areas_label.text() == "Adjusted areas (2)"
+    assert bar.show_btn.isChecked() and not bar.hide_btn.isChecked() and w.ctl.view.show_areas
+    audio = s.project.layers[0].audio.copy()
+
+    QTest.mouseClick(bar.hide_btn, Qt.MouseButton.LeftButton)
+    assert not w.ctl.view.show_areas
+    assert bar.hide_btn.isChecked() and not bar.show_btn.isChecked()
+    assert not w.actions["view.show_areas"].isChecked() and not panel.highlight.isChecked()  # all in step
+    w.editor.canvas.grab()
+    assert np.array_equal(s.project.layers[0].audio, audio)  # display only
+
+    QTest.mouseClick(bar.hide_btn, Qt.MouseButton.LeftButton)  # clicking it again keeps it hidden
+    assert not w.ctl.view.show_areas and bar.hide_btn.isChecked()
+    QTest.mouseClick(bar.show_btn, Qt.MouseButton.LeftButton)
+    assert w.ctl.view.show_areas and w.actions["view.show_areas"].isChecked() and panel.highlight.isChecked()
+
+    w.actions["view.show_areas"].trigger()  # Shift+H / the menu item: the bar follows
+    assert bar.hide_btn.isChecked() and not bar.show_btn.isChecked()
+    panel.highlight.setChecked(True)  # the panel's checkbox: the bar follows
+    assert bar.show_btn.isChecked()
+
+
+def test_trackpad_pinch_zooms_time_around_the_pointer(qtbot, win):
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QNativeGestureEvent, QPointingDevice
+    from PySide6.QtWidgets import QApplication
+
+    w = win
+    cv, v = w.editor.canvas, w.ctl.view
+    dur = w.ctl.session.project.duration
+    g = cv.view_geometry()
+    x = cv.width() * 0.75
+    t_at = float(g.t_of_x(x))
+
+    def pinch(value):
+        pos = QPointF(x, cv.height() / 2)
+        ev = QNativeGestureEvent(Qt.NativeGestureType.ZoomNativeGesture, QPointingDevice.primaryPointingDevice(), 2,
+                                 pos, pos, QPointF(cv.mapToGlobal(pos.toPoint())), value, QPointF(0, 0))
+        QApplication.sendEvent(cv, ev)
+        assert ev.isAccepted()
+
+    for _ in range(5):
+        pinch(0.2)  # fingers spreading: zoom in
+    assert v.t1 - v.t0 == pytest.approx(dur / 1.2 ** 5, rel=1e-6)
+    assert float(cv.view_geometry().t_of_x(x)) == pytest.approx(t_at, abs=1e-3)  # the point under the fingers stays
+    for _ in range(5):
+        pinch(-1 / 6)  # 1 / (1 - 1/6) = 1.2: back out
+    assert v.t1 - v.t0 == pytest.approx(dur, rel=1e-6)

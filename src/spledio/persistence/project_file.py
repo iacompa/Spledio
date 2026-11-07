@@ -12,8 +12,8 @@ A project file is a ZIP container (entries STORED, not compressed) holding:
   absolute path plus SHA-256.
 
 Loading never unpickles (``allow_pickle=False``), never extracts member names
-to disk, rejects unexpected/oversized members, validates every manifest field
-and verifies asset checksums.
+to disk, rejects unexpected, oversized or compressed members, validates every
+manifest field and verifies asset checksums.
 """
 
 from __future__ import annotations
@@ -127,7 +127,11 @@ def save_project(session, path: str, portable: bool = False) -> None:
             src = a.readable_path if os.path.exists(a.readable_path) else None
             if src is not None:
                 if file_sha256(src) != a.sha256:
-                    raise AssetMismatchError(a.id, src)
+                    if portable:  # would embed a file that is not the project's source
+                        raise AssetMismatchError(a.id, src)
+                    # changed on disk since it was opened (or opened with "use it anyway"): the
+                    # layers are in memory, so store them in full, like a missing source
+                    continue
                 asset_audio[a.id] = _decode_asset_file(src, dtype)
 
     fd, tmp = tempfile.mkstemp(prefix=".spledio-", suffix=".partial", dir=proj_dir)
@@ -310,6 +314,11 @@ def _manifest_from(zf: zipfile.ZipFile) -> dict:
     for n in names:
         if not _MEMBER_RE.match(n):
             raise ProjectFormatError(f"Unexpected entry in project archive: {n!r}")
+    for info in zf.infolist():
+        # Spledio stores every member uncompressed; a compressed one could inflate far beyond the
+        # archive's size when an embedded source is extracted (nothing is unpacked before this check)
+        if info.compress_type != zipfile.ZIP_STORED:
+            raise ProjectFormatError(f"Unexpected compressed entry in project archive: {info.filename!r}")
     if "manifest.json" not in names:
         raise ProjectFormatError("manifest.json missing")
     info = zf.getinfo("manifest.json")

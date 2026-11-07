@@ -130,6 +130,7 @@ class EditorController(QObject):
         self._rebind_analyzer()
         self.playback.seek(0)
         self.sessionReplaced.emit()
+        self.playheadChanged.emit(0)  # the time readout shows the new project's length right away
         self.dirtyChanged.emit(session.dirty)
 
     def _on_session_event(self, ev: SessionEvent) -> None:
@@ -218,8 +219,13 @@ class EditorController(QObject):
         return self._busy
 
     def run_job(self, label: str, fn: Callable[[threading.Event], object], on_done: Callable[[object], None] | None = None,
-                on_error: Callable[[BaseException], None] | None = None, quiet: bool = False) -> bool:
+                on_error: Callable[[BaseException], None] | None = None, quiet: bool = False,
+                prepare: Callable[[], None] | None = None) -> bool:
         """Run ``fn(cancel_event)`` on a worker; ``on_done(result)`` on the GUI thread.
+
+        ``prepare()`` runs on the GUI thread just before the job starts (not when the job is
+        refused because another one is running): session state the job depends on, such as the
+        selection's channel scope, is changed there, never from the worker.
 
         ``quiet`` (quick jobs such as area level changes): never announce ``busyChanged`` – the
         toolbar and panels must not grey out and back on every key press – and only show the
@@ -228,6 +234,8 @@ class EditorController(QObject):
         if self._busy:
             self.statusMessage.emit("Busy: wait for the current operation or press Esc to cancel it", 4000)
             return False
+        if prepare is not None:
+            prepare()
         self._busy = True
         self.job_label = label
         self._job_cancel = threading.Event()
@@ -295,7 +303,8 @@ class EditorController(QObject):
             self.error.emit(label, f"{e}\n\n{tb[-1500:]}")
 
     # --------------------------------------------------------------- edits
-    def _edit(self, label: str, fn: Callable[[EditorSession, threading.Event], object]) -> None:
+    def _edit(self, label: str, fn: Callable[[EditorSession, threading.Event], object], scoped: bool = False) -> None:
+        """Run a session edit as a job. ``scoped``: apply the Channels scope to the selection first."""
         s = self.session
         if s is None:
             return
@@ -308,30 +317,30 @@ class EditorController(QObject):
             if res is not None and hasattr(res, "command"):
                 self.statusMessage.emit(res.command.label, 5000)
 
-        self.run_job(label, lambda cancel: fn(s, cancel), done)
+        self.run_job(label, lambda cancel: fn(s, cancel), done, prepare=(lambda: self._ensure_scope(s)) if scoped else None)
 
     def _ensure_scope(self, s: EditorSession):
+        """GUI thread only (pass it as ``run_job(prepare=...)``): it changes the selection."""
         if s.selection is not None and s.selection.channels != self.tools.channel_scope:
             s._set_selection_raw(s.selection.with_channels(self.tools.channel_scope))
 
     def apply_gain(self, gain_db: float) -> None:
         def fn(s, cancel):
-            self._ensure_scope(s)
             s.component(cancel=lambda: cancel.is_set())
             return s.apply_gain(gain_db)
 
-        self._edit("Apply gain", fn)
+        self._edit("Apply gain", fn, scoped=True)
 
     def mute_selection(self) -> None:
-        self._edit("Mute", lambda s, c: (self._ensure_scope(s), s.component(cancel=c.is_set), s.mute_selection())[-1])
+        self._edit("Mute", lambda s, c: (s.component(cancel=c.is_set), s.mute_selection())[-1], scoped=True)
 
     def delete_spectral(self) -> None:
         self._edit("Delete spectral content",
-                   lambda s, c: (self._ensure_scope(s), s.component(cancel=c.is_set), s.delete_spectral())[-1])
+                   lambda s, c: (s.component(cancel=c.is_set), s.delete_spectral())[-1], scoped=True)
 
     def extract(self, copy: bool = False) -> None:
         self._edit("Copy to new layer" if copy else "Extract to new layer",
-                   lambda s, c: (self._ensure_scope(s), s.component(cancel=c.is_set), s.extract_to_new_layer(copy=copy))[-1])
+                   lambda s, c: (s.component(cancel=c.is_set), s.extract_to_new_layer(copy=copy))[-1], scoped=True)
 
     def brush_stroke(self, brush: BrushShape, kind: str) -> None:
         tools = self.tools
@@ -351,7 +360,6 @@ class EditorController(QObject):
 
     def preview_gain(self, gain_db: float, then_play: bool = True) -> None:
         def fn(s, cancel):
-            self._ensure_scope(s)
             s.component(cancel=cancel.is_set)
             return s.preview_gain(gain_db)
 
@@ -360,8 +368,9 @@ class EditorController(QObject):
             if then_play:
                 self.play_preview(bypass=False)
 
-        if self.session is not None:
-            self.run_job("Render preview", lambda cancel: fn(self.session, cancel), done)
+        s = self.session
+        if s is not None:
+            self.run_job("Render preview", lambda cancel: fn(s, cancel), done, prepare=lambda: self._ensure_scope(s))
 
     def commit_preview(self) -> None:
         self._edit("Apply", lambda s, c: s.commit_preview())
@@ -431,9 +440,11 @@ class EditorController(QObject):
             # keep playing, but switch to the full mix so the adjustment is heard live
             self.set_playback_source(self._mix_source, AuditionState())
 
-        def job(cancel):
+        def prepare():
             if s.current_area() is None:
                 self._ensure_scope(s)
+
+        def job(cancel):
             return fn(s)
 
         def done(res):
@@ -458,7 +469,7 @@ class EditorController(QObject):
                 self._area_queue.clear()
                 self.error.emit("Adjust area", f"{type(e).__name__}: {e}")
 
-        self.run_job(self.AREA_JOB, job, done, failed, quiet=True)
+        self.run_job(self.AREA_JOB, job, done, failed, quiet=True, prepare=prepare)
 
     def _drain_area_queue(self, s) -> None:
         """Apply changes queued while the last adjustment was rendering, as one more job."""
@@ -541,36 +552,42 @@ class EditorController(QObject):
             self._mix_source = None
             return
         p = s.project
-        buf = np.empty((p.n_frames, 2 if p.channels == 1 else p.channels), dtype=np.float32)
-        self._render_mix_into(buf, 0, p.n_frames)
+        out = self.playback.max_output_channels()  # asked once, not per block
+        buf = np.empty((p.n_frames, monitor_channels(p.channels, out)), dtype=np.float32)
+        self._render_mix_into(buf, 0, p.n_frames, out)
         self._mix_source = ArraySource.adopt(buf, s.sample_rate, label="Mix", total_frames=p.n_frames)
         if self.audition.mode == "mix":
             self.playback.set_source(self._mix_source, keep_position=True)
 
-    def _render_mix_into(self, buf: np.ndarray, a: int, b: int) -> None:
-        """``buf[a:b]`` = the monitoring layout of the float32 mix, block by block (no whole-file temporaries)."""
+    def _render_mix_into(self, buf: np.ndarray, a: int, b: int, out_channels: int | None) -> None:
+        """``buf[a:b]`` = the monitoring layout of the float32 mix for an output device with
+        ``out_channels`` outputs, block by block (no whole-file temporaries)."""
         s = self.session
         for i in range(a, b, MIX_BLOCK):
             j = min(b, i + MIX_BLOCK)
-            buf[i:j] = monitor_layout(s.project.render_mix(i, j, dtype=np.float32)).T
+            buf[i:j] = monitor_layout(s.project.render_mix(i, j, dtype=np.float32), out_channels).T
 
     def _update_mix_regions(self, change: Change) -> None:
         s = self.session
         if s is None or self._mix_source is None or not change.audio:
             self._rebuild_mix_source()
             return
-        if self._mix_source.data.shape[0] != s.project.n_frames:
-            self._rebuild_mix_source()
+        out = self.playback.max_output_channels()
+        if self._mix_source.data.shape != (s.project.n_frames, monitor_channels(s.project.channels, out)):
+            self._rebuild_mix_source()  # new length, or the output device changed: start over
             return
         buf = self._mix_source.data.copy()  # the playing buffer stays immutable: one new copy, handed over
         for _lid, a, b in change.audio:
-            self._render_mix_into(buf, a, b)
+            self._render_mix_into(buf, a, b, out)
         self._mix_source = ArraySource.adopt(buf, s.sample_rate, label="Mix", total_frames=s.project.n_frames)
         if self.audition.mode == "mix":
             self.playback.set_source(self._mix_source, keep_position=True)
 
     def mix_source(self) -> PlaybackSource | None:
         return self._mix_source
+
+    def _monitor(self, audio: np.ndarray) -> np.ndarray:
+        return monitor_layout(audio, self.playback.max_output_channels())
 
     def set_playback_source(self, src: PlaybackSource, state: AuditionState) -> None:
         self.audition = state
@@ -583,6 +600,9 @@ class EditorController(QObject):
         if self.playback.is_playing:
             self.playback.pause()
         else:
+            out = self.playback.max_output_channels()
+            if self._mix_source is not None and out is not None and self._mix_source.channels > out:
+                self._rebuild_mix_source()  # the output device has fewer channels than when it was built
             if self.audition.mode not in ("mix", "preview", "bypass", "ab_a", "ab_b") or self.playback.source is None:
                 self.set_playback_source(self._mix_source, AuditionState())
             self._apply_loop()
@@ -675,7 +695,6 @@ class EditorController(QObject):
             return
 
         def fn(cancel):
-            self._ensure_scope(s)
             if mode in ("selected", "remainder"):
                 s.component(cancel=cancel.is_set)
             return {
@@ -686,11 +705,11 @@ class EditorController(QObject):
             }[mode]()
 
         def done(buf):
-            src = ArraySource(monitor_layout(buf.data), s.sample_rate, label=buf.label, offset=buf.start,
+            src = ArraySource(self._monitor(buf.data), s.sample_rate, label=buf.label, offset=buf.start,
                               total_frames=s.project.n_frames)
             self._play_region(src, AuditionState(mode, buf.label), buf.start, buf.end)
 
-        self.run_job("Render audition", fn, done)
+        self.run_job("Render audition", fn, done, prepare=lambda: self._ensure_scope(s))
 
     def play_preview(self, bypass: bool = False) -> None:
         s = self.session
@@ -698,7 +717,7 @@ class EditorController(QObject):
             self.statusMessage.emit("No preview: set a gain and press Preview first", 4000)
             return
         start, a_reg, b_reg, label = s.ab_regions()
-        region = monitor_layout(a_reg if bypass else b_reg)
+        region = self._monitor(a_reg if bypass else b_reg)
         src = OverlaySource(self._mix_source, start, region, label="Bypass (original)" if bypass else "Preview")
         if self.playback.is_playing and self.audition.mode in ("preview", "bypass"):
             self.set_playback_source(src, AuditionState("bypass" if bypass else "preview",
@@ -727,7 +746,7 @@ class EditorController(QObject):
             self.statusMessage.emit(str(e), 4000)
             return
         going_a = self.audition.mode != "ab_a"
-        region = monitor_layout(a_reg if going_a else b_reg)
+        region = self._monitor(a_reg if going_a else b_reg)
         src = OverlaySource(self._mix_source, start, region, label="A original" if going_a else "B processed")
         st = AuditionState("ab_a" if going_a else "ab_b", ("A – original (before: " if going_a else "B – processed (") + label + ")", start)
         if self.playback.is_playing:
@@ -806,12 +825,58 @@ class EditorController(QObject):
             self.session = None
 
 
-def monitor_layout(audio: np.ndarray) -> np.ndarray:
-    """Monitoring only: duplicate mono to two channels so it plays on both speakers.
-    Project audio, edits and exports are never changed by this."""
-    if audio.shape[0] == 1:
+def monitor_channels(channels: int, out_channels: int | None = None) -> int:
+    """How many channels :func:`monitor_layout` gives ``channels``-channel audio on that device."""
+    if channels == 1:
+        return 2
+    if out_channels is None or channels <= out_channels:
+        return channels
+    return 2 if out_channels >= 2 else 1
+
+
+def monitor_layout(audio: np.ndarray, out_channels: int | None = None) -> np.ndarray:
+    """Monitoring only: fit ``(channels, frames)`` audio to the output device.
+    Project audio, edits and exports are never changed by this.
+
+    * Mono is duplicated to two channels so it plays on both speakers.
+    * Audio with more channels than the device has outputs (``out_channels``; ``None`` =
+      unknown, then nothing is folded) is folded down to stereo with :func:`fold_down_matrix`.
+    """
+    ch = audio.shape[0]
+    if ch == 1:
         return np.repeat(audio, 2, axis=0)
-    return audio
+    if out_channels is None or ch <= out_channels:
+        return audio
+    m = fold_down_matrix(ch, 2 if out_channels >= 2 else 1)
+    return (m @ np.asarray(audio, dtype=np.float64)).astype(audio.dtype, copy=False)
+
+
+def fold_down_matrix(channels: int, outputs: int = 2) -> np.ndarray:
+    """``(outputs, channels)`` monitoring fold-down, each row scaled so its coefficients sum to 1
+    (the fold-down is never louder than the loudest channel, so monitoring adds no overs).
+
+    * 6 channels are taken as 5.1 in the WAV order L R C LFE Ls Rs: left = L + 0.71·(C + LFE + Ls),
+      right = R + 0.71·(C + LFE + Rs). The channel layout stored in the file is not read, so the
+      fourth channel (LFE in 5.1) is kept too: every channel stays audible.
+    * Otherwise channels 1, 3, 5 … go left and 2, 4, 6 … right; with an odd count the last
+      channel goes to both sides at 0.71 (e.g. L R C).
+    * One output: the mean of all channels.
+    """
+    if outputs == 1:
+        return np.full((1, channels), 1.0 / channels)
+    m = np.zeros((2, channels))
+    g = math.sqrt(0.5)
+    if channels == 6:
+        m[0, [0, 2, 3, 4]] = (1.0, g, g, g)
+        m[1, [1, 2, 3, 5]] = (1.0, g, g, g)
+    else:
+        last = channels - 1 if channels % 2 else None
+        for c in range(channels):
+            if c == last:
+                m[:, c] = g
+            else:
+                m[c % 2, c] = 1.0
+    return m / m.sum(axis=1, keepdims=True)
 
 
 def _padded(provider, n_frames: int, channels: int):

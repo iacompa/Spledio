@@ -1,7 +1,12 @@
-"""Dark theme (original palette) with scalable text and visible focus states."""
+"""Dark theme (original palette) with scalable text and visible focus states.
+
+Spledio is always dark: there is no light theme and no theme setting. ``apply_theme`` also asks
+the system for its dark appearance, so the parts macOS draws itself (title bar, menus, the
+Open/Save panels and message boxes) stay dark when the Mac is in light mode."""
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -17,6 +22,10 @@ DANGER = "#ff6b6b"
 
 
 def apply_theme(app: QApplication, font_scale: float = 1.0) -> None:
+    try:  # Qt 6.8+: dark native title bar, menus and dialogs whatever the system appearance is
+        app.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    except AttributeError:
+        pass
     app.setStyle("Fusion")
     pal = QPalette()
     pal.setColor(QPalette.Window, QColor(BG))

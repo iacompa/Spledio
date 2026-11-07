@@ -185,7 +185,8 @@ TUTORIALS: tuple[Tutorial, ...] = (
               "normalised."),
             S("For 16/24-bit, if the mix goes above 0 dBFS you choose what happens: stop with an error (the "
               "default), lower the whole level, limit, or clip – never silently."),
-            S("Integer formats get TPDF dither by default; float export is never dithered."),
+            S("Integer formats get TPDF dither by default when samples must be rounded; an unedited file at its own "
+              "bit depth is written unchanged, and float export is never dithered."),
             S("The file is written to a temporary file first and then moved into place, so a failed export never "
               "leaves a half-written file or damages an existing one."),
         ),

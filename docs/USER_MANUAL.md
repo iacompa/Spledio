@@ -64,7 +64,9 @@ That's it. The rest of this manual explains what else you can do.
 Hover the mouse over the picture to read the exact time, pitch (Hz and musical note) and level at the
 bottom of the window.
 
-**Zoom:** ⌘= / ⌘− (time), ⌘⇧↑ / ⌘⇧↓ (pitch), ⌘0 shows the whole file, ⌘⇧E zooms to the selection.
+**Zoom:** the bar under the spectrogram has **Zoom − / +** (time), **Frequency − / +** (pitch, the height),
+**Whole File** and **Selection**. On a trackpad, **pinch** over the spectrogram to zoom in time.
+Keys: ⌘= / ⌘− (time), ⌘⇧↑ / ⌘⇧↓ (pitch), ⌘0 shows the whole file, ⌘⇧E zooms to the selection.
 Scroll to move along in time, ⌘+scroll zooms time, Shift+scroll zooms pitch. **H** is the hand tool for dragging the view.
 
 ---
@@ -100,8 +102,9 @@ silenced audio can always be brought back.
 * **Click inside an outlined area** to pick it again. The level bar and the keys then change that area.
 * **Delete**, or **✕** on the level bar, removes an area's change. The audio there comes back **exactly**,
   and the other areas are not affected.
-* **Highlight** (toolbar button, **Shift+H**, on by default) hides the outlines when there are many.
-  This only changes the display, not the sound. The picked area stays visible.
+* **Show / Hide** next to *Adjusted areas*, at the bottom right under the spectrogram (or **Shift+H**),
+  shows or hides the outlines of every part you changed. Shown by default. This only changes the display,
+  not the sound. The picked area stays visible.
 * The **Adjusted Areas** panel lists every area. You can type a level, silence an area, remove one, or
   remove all of them at once.
 
@@ -117,7 +120,7 @@ Quick repeated clicks on the same area count as **one** undo step.
 | **S** | Only the selected sound, so you can check you boxed the right thing |
 | **Shift+S** | The selected time with all pitches |
 | **R** | Everything *except* the selection |
-| **D** | Exactly what an edit removes (the difference) |
+| **D** | Exactly what the last edit removed (the difference), including a level change on an area and every area of *Remove all areas* |
 | **L** | Loop the selection |
 | **Home** | Back to the start |
 
@@ -139,7 +142,12 @@ For careful work, the **Reduce Selected Sound** panel offers a preview workflow:
 
 1. Set an amount, for example −12 dB.
 2. **Preview (P)** plays the result without applying it.
-3. **Bypass (B)** or **A/B (A)** switch between original and preview while playing.
+3. **Bypass (B)** or **A/B (A)** switch between original and preview while playing. Without a preview,
+   **A/B** compares the last edit, an area turned up or down with ↑/↓ included. An edit made of several
+   parts (Remove all areas, the transfer brush, Extract) is compared as a whole. Extract and the transfer
+   brush move sound to another layer without changing the mix, so A and B sound the same and D is silent
+   for them. After a time
+   edit (delete, crop, insert) there is nothing older to compare until you edit again.
 4. **Apply** (⌘Return) applies it as one undo step, or **Cancel** discards the preview.
 
 Other tools, all undoable:
@@ -148,16 +156,22 @@ Other tools, all undoable:
   freehand lasso (**Shift+L**), polygon (**Shift+P**) and selection brush (**Shift+B**).
   Hold **Shift** to add to a selection and **Alt/Option** to subtract.
 * **Brushes:** reduce (**Shift+R**), amplify (**Shift+A**) and transfer to another layer (**Shift+T**).
-  One stroke is one undo step.
+  One stroke is one undo step. The transfer brush keeps the mix the same even when the two layers have
+  different levels or polarity. It refuses to move sound between a muted and an unmuted layer (or a
+  soloed and an unsoloed one), because that would change what you hear.
 * **Layers:** extract (⌘J) or copy (⌘⇧J) the selected sound to its own layer, then mute, solo or change
-  the level of each layer. You can export layers as separate files (stems).
+  the level of each layer. A new layer starts at the level, polarity, mute and solo of the layer it came
+  from, so the mix sounds the same until you change it. You can export layers as separate files (stems).
 * **Time:** delete or crop time, and insert silence. These change the length of the whole project.
+  Delete and crop use the time span you drew; the selection's feather does not widen it. A time edit
+  clears the selection, because it no longer lines up with the audio; undo brings it back.
 
 ---
 
 ## 8. Undo and history
 
-* **⌘Z** undoes and **⌘⇧Z** redoes. Up to 200 steps.
+* **⌘Z** undoes and **⌘⇧Z** redoes. Up to 200 steps. After more than 200 edits the oldest ones can no longer
+  be undone, and the project counts as changed until you save it, even after undoing everything that is left.
 * The **History** panel lists every step. Click one to jump back to it.
 
 ---
@@ -166,13 +180,17 @@ Other tools, all undoable:
 
 * **Save Project** (⌘S) stores a `.spledio` file with your layers, areas and edits. Reopening it gives
   exactly the same sound, and your adjusted areas can still be changed.
-  The undo history itself is not saved.
+  The undo history itself is not saved. If the original audio file was changed by another program while
+  the project was open, saving still works: the project then keeps a full copy of the edited audio
+  instead of referring to the changed file (a larger file).
 * **Portable project** also stores a copy of the original audio inside the project file, so it still
   works if you move or delete the original.
 * **Export Audio** (⌘E) writes WAV (16-bit, 24-bit or 32-bit float) or FLAC (16 or 24-bit), at the
   original or a new sample rate. What you export is exactly what you heard.
   * If boosting made the sound too loud for 16/24-bit, you choose what happens: stop, lower the
     level, limit, or clip. 32-bit float never clips.
+  * 16/24-bit exports get TPDF dither when samples must be rounded. When nothing needs rounding,
+    such as an unedited 16-bit file saved as 16 or 24-bit, the samples are written unchanged.
   * Spledio never overwrites your original audio file.
 * **Autosave:** while you have unsaved changes, Spledio saves a recovery copy every 2 minutes.
   After a crash it offers to restore your work.
@@ -192,7 +210,7 @@ Other tools, all undoable:
 | Quieter / louder 1 dB | ↓ / ↑ (or − / +) |
 | Quieter / louder 6 dB | Shift+↓ / Shift+↑ |
 | Silence / remove adjustment | 0 / Delete |
-| Highlight areas on/off | Shift+H |
+| Show / hide adjusted areas | Shift+H |
 | Rectangle / time / frequency tool | M / T / F |
 | Select all / deselect | ⌘A / ⌘D |
 | Zoom time / pitch | ⌘= ⌘− / ⌘⇧↑ ⌘⇧↓ |

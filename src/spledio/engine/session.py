@@ -34,7 +34,6 @@ from spledio.commands.history import (
     make_patch,
     write_patch,
     patch_in_place,
-    patch_versions,
     read_rows,
     write_rows,
 )
@@ -519,9 +518,10 @@ class EditorSession:
         """Move (or copy) the selected component into a new time-aligned layer.
 
         Move: new = c, remainder = x - c, so new + remainder == x (float64 exact,
-        then rounded once to the storage dtype). Copy keeps the source; the
-        summed level of the two layers can then increase (up to +6 dB where
-        the copy fully overlaps).
+        then rounded once to the storage dtype). The new layer takes the source
+        layer's gain, polarity, mute and solo, so a move leaves the mix
+        unchanged. Copy keeps the source; the summed level of the two layers can
+        then increase (up to +6 dB where the copy fully overlaps).
         """
         with self._lock:
             sel = self.selection_or_error()
@@ -540,6 +540,10 @@ class EditorSession:
                 name=name or f"{layer.name} – {'copy' if copy else 'extract'} {len(self.project.layers)}",
                 audio=new_audio,
                 color=self.project.next_color(),
+                gain_db=layer.gain_db,
+                mute=layer.mute,
+                solo=layer.solo,
+                polarity_inverted=layer.polarity_inverted,
                 base={"type": "silence"},
                 provenance=f"{verb.lower()} from '{layer.name}': {self.selection_label(sel)}",
             )
@@ -560,7 +564,12 @@ class EditorSession:
 
     def transfer_brush(self, brush: BrushShape, target_layer_id: str, amount: float = 1.0) -> EditResult:
         """Move ``amount`` (0..1) of the content under the brush from the active layer
-        to the target layer. Source + target is unchanged (before layer gains)."""
+        to the target layer, keeping the mix unchanged.
+
+        The content is rescaled by the ratio of the two layers' mix factors (gain and
+        polarity), so source + target sounds the same at their current levels. A move
+        between an audible and a silent layer (mute / solo) cannot keep the mix and is
+        refused."""
         with self._lock:
             src = self._editable_layer()
             if target_layer_id == src.id:
@@ -568,6 +577,14 @@ class EditorSession:
             dst = self.project.layer(target_layer_id)
             if dst.locked:
                 raise EditError(f"Target layer '{dst.name}' is locked")
+            audible = self.project.audible_layers()
+            if (src in audible) != (dst in audible):
+                silent = dst if src in audible else src
+                raise EditError(f"Layer '{silent.name}' is muted or not soloed, so the moved sound would "
+                                f"{'go silent' if silent is dst else 'become audible'}. Change its mute / solo first.")
+            if dst.mix_factor == 0.0:
+                raise EditError(f"Target layer '{dst.name}' is at -inf dB; raise its level first")
+            ratio = src.mix_factor / dst.mix_factor
             amount = float(np.clip(amount, 0.0, 1.0))
             sel = Selection.of(brush, channels=self.selection.channels if self.selection else None)
             if self.selection is not None:
@@ -575,9 +592,10 @@ class EditorSession:
                                 feather_f=self.selection.feather_f, feather_enabled=self.selection.feather_enabled,
                                 channels=self.selection.channels)
             comp = self.component(sel, src)
-            moved = (amount * comp.data).astype(np.dtype(self.project.storage_dtype)).astype(np.float64)
+            dt = np.dtype(self.project.storage_dtype)
+            moved = (amount * comp.data).astype(dt).astype(np.float64)
             new_src = src.audio[:, comp.start : comp.end].astype(np.float64) - moved
-            new_dst = dst.audio[:, comp.start : comp.end].astype(np.float64) + moved
+            new_dst = dst.audio[:, comp.start : comp.end].astype(np.float64) + (ratio * moved if ratio != 1.0 else moved)
             p1 = make_patch(self.history.store, src, comp.start, new_src, comp.channels)
             p2 = make_patch(self.history.store, dst, comp.start, new_dst, comp.channels)
             label = f"Transfer {amount * 100:.0f}% · {self.selection_label(sel)} · {src.name} → {dst.name}"
@@ -670,8 +688,13 @@ class EditorSession:
         return self._commit(cmd, change)
 
     # ------------------------------------------------------- timeline ops
-    def _time_range_samples(self, sel: Selection | None = None) -> tuple[int, int]:
-        sel = sel or self.selection_or_error()
+    def time_range_samples(self, sel: Selection | None = None) -> tuple[int, int]:
+        """The sample span Delete/Crop Time act on: the drawn shape's time extent.
+
+        The feather is a soft spectral edge, not part of the time range, so it is
+        ignored here; otherwise a feathered box would delete (or keep) more time
+        than the user drew."""
+        sel = (sel or self.selection_or_error()).with_feather(enabled=False)
         b = sel.bounds(self.project.duration, self.project.nyquist)
         if b is None:
             raise EditError("Empty selection")
@@ -689,11 +712,15 @@ class EditorSession:
         if frames <= 0:
             raise EditError("A project cannot be shortened to zero length")
         cmd: Command = TimelineCommand(label, self.project, self.history.store, new, frames, params)
+        children = [cmd]
         had_areas = bool(self.areas)
         if had_areas:  # area components no longer line up with the audio: keep their effect, stop tracking them
-            cmd = CompositeCommand(label, [cmd, AreasStateCommand("areas", self, self.areas, ())], params)
+            children.append(AreasStateCommand("areas", self, self.areas, ()))
+        if self.selection is not None:  # it no longer lines up either; part of the same step, so undo brings it back
+            children.append(SelectionCommand("selection", self, self.selection, None))
+        if len(children) > 1:
+            cmd = CompositeCommand(label, children, params)
         change = cmd.redo(self.project, self.history.store)
-        self.set_selection(None)
         res = self._commit(cmd, change)
         res.warnings.append("Time operation rippled ALL layers to keep them in sync. Markers were not moved.")
         if had_areas:
@@ -703,13 +730,13 @@ class EditorSession:
 
     def delete_time(self) -> EditResult:
         """Remove the selection's time span from every layer (shortens the project)."""
-        a, e = self._time_range_samples()
+        a, e = self.time_range_samples()
         return self._timeline(f"Delete time {a / self.sample_rate:.3f}-{e / self.sample_rate:.3f} s (all layers)",
                               lambda x: np.concatenate([x[:, :a], x[:, e:]], axis=1), {"start": a, "end": e})
 
     def crop_time(self) -> EditResult:
         """Keep only the selection's time span in every layer."""
-        a, e = self._time_range_samples()
+        a, e = self.time_range_samples()
         return self._timeline(f"Crop to {a / self.sample_rate:.3f}-{e / self.sample_rate:.3f} s (all layers)",
                               lambda x: x[:, a:e].copy(), {"start": a, "end": e})
 
@@ -994,37 +1021,67 @@ class EditorSession:
             layer = self.project.layer(pv.layer_id)
             return AuditionBuffer(pv.start, self._f32((pv.original - pv.processed) * layer.mix_factor),
                                   f"Removed by preview: {pv.label}")
-        for i in range(len(self.history.undo_stack) - 1, -1, -1):
-            cmd = self.history.undo_stack[i]
+        cmd, start, parts = self._last_edit()
+        diff = sum(layer.mix_factor * (before - after) for layer, before, after in parts)
+        return AuditionBuffer(start, self._f32(diff), f"Removed by: {cmd.label}")
+
+    def _last_edit(self) -> tuple[Command, int, list[tuple[Layer, np.ndarray, np.ndarray]]]:
+        """The most recent audio edit that can still be compared (A/B, Difference), whole.
+
+        Returns ``(command, start, parts)``: every layer the edit changed, with its audio over
+        the span covering all of the edit's parts as it was before and as it is now (float64).
+        A layer the edit created (Extract) is silent before. Gain edits, brush strokes,
+        transfers, extractions and adjusted-area changes count. A time edit (delete / crop /
+        insert) moves the audio, so no older edit lines up any more; neither does an edit on a
+        layer that has been deleted since."""
+        for cmd in reversed(self.history.undo_stack):
+            if _moves_timeline(cmd):
+                break
             patches = _patches_of(cmd)
-            if patches:
-                p = patches[0]
-                f = self.project.layer(p.layer_id).mix_factor if self.project.has_layer(p.layer_id) else 1.0
-                before, after = patch_versions(self.project, self.history, i, p)
-                return AuditionBuffer(p.start, self._f32((before.astype(np.float64) - after.astype(np.float64)) * f),
-                                      f"Removed by: {cmd.label}")
+            if not patches:
+                continue
+            if not all(self.project.has_layer(p.layer_id) for p in patches):
+                break
+            start = min(p.start for p in patches)
+            end = max(p.end for p in patches)
+            added = _layers_added_by(cmd)
+            parts: list[tuple[Layer, np.ndarray, np.ndarray]] = []
+            for lid in dict.fromkeys(p.layer_id for p in patches):
+                if lid in added:
+                    continue  # silent before the edit, whatever was written into it
+                layer = self.project.layer(lid)
+                after = layer.audio[:, start:end].astype(np.float64)
+                before = after.copy()
+                for p in reversed([p for p in patches if p.layer_id == lid]):  # undo the parts in reverse
+                    # applied, so its held samples are its edited rows from before it
+                    write_rows(before, p.channels, p.start - start, self.history.store.get(p.held))
+                parts.append((layer, before, after))
+            for lid in added:
+                if self.project.has_layer(lid):
+                    layer = self.project.layer(lid)
+                    after = layer.audio[:, start:end].astype(np.float64)
+                    parts.append((layer, np.zeros_like(after), after))
+            return cmd, start, parts
         raise EditError("No edit to compare: apply or preview an edit first")
 
     def ab_regions(self) -> tuple[int, np.ndarray, np.ndarray, str]:
         """(start, mix_region_A_original, mix_region_B_processed, label) for A/B.
 
-        Uses the pending preview if any, otherwise the most recent audio edit."""
+        Uses the pending preview if any, otherwise the whole of the most recent audio edit."""
         pv = self._preview
         if pv is not None:
             layer = self.project.layer(pv.layer_id)
             a = self.mix_with_override(layer, pv.start, pv.original)
             b = self.mix_with_override(layer, pv.start, pv.processed)
             return pv.start, a, b, pv.label
-        for i in range(len(self.history.undo_stack) - 1, -1, -1):
-            cmd = self.history.undo_stack[i]
-            patches = _patches_of(cmd)
-            if patches:
-                p = patches[0]
-                layer = self.project.layer(p.layer_id)
-                a = self.mix_with_override(layer, p.start, patch_versions(self.project, self.history, i, p)[0])
-                b = self.project.render_mix(p.start, p.end, dtype=np.float32)
-                return p.start, a, b, cmd.label
-        raise EditError("No edit to compare: apply or preview an edit first")
+        cmd, start, parts = self._last_edit()
+        b = self.project.render_mix(start, start + parts[0][2].shape[1])
+        a = b.copy()
+        audible = self.project.audible_layers()
+        for layer, before, after in parts:
+            if layer in audible:
+                a += layer.mix_factor * (before - after)
+        return start, a.astype(np.float32), b.astype(np.float32), cmd.label
 
     def mix_with_override(self, layer: Layer, start: int, data: np.ndarray) -> np.ndarray:
         n = data.shape[1]
@@ -1098,12 +1155,28 @@ class EditorSession:
 def _patches_of(cmd: Command):
     if isinstance(cmd, PatchCommand):
         return cmd.patches
+    if isinstance(cmd, AreaCommand):
+        return [cmd.patch]
     if isinstance(cmd, CompositeCommand):
         out = []
         for c in cmd.children:
             out.extend(_patches_of(c))
         return out
     return []
+
+
+def _layers_added_by(cmd: Command) -> list[str]:
+    if isinstance(cmd, AddLayerCommand):
+        return [cmd.layer.id]
+    if isinstance(cmd, CompositeCommand):
+        return [lid for c in cmd.children for lid in _layers_added_by(c)]
+    return []
+
+
+def _moves_timeline(cmd: Command) -> bool:
+    if isinstance(cmd, TimelineCommand):
+        return True
+    return isinstance(cmd, CompositeCommand) and any(_moves_timeline(c) for c in cmd.children)
 
 
 __all__ = ["EditorSession", "EditError", "SessionEvent", "EditResult", "EditPreview", "AuditionBuffer"]

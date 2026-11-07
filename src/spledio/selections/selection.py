@@ -13,8 +13,11 @@ INVERT      ``M = 1 - M`` (whole project extent)
 
 The mask used for DSP is the continuous membership sampled at the grid nodes
 ``(t_k, f_b)`` = (frame centre time, bin centre frequency) of the edit STFT
-configuration. The UI overlay draws the very same raster, so what you see is
-exactly what is processed.
+configuration. Frames centred before the start or after the end of the file
+(they still cover its first / last samples) are sampled at the file edge, so a
+selection that reaches the start or end of the file is applied right up to the
+first / last sample. The UI overlay draws the very same raster, so what you
+see is exactly what is processed.
 """
 
 from __future__ import annotations
@@ -280,8 +283,9 @@ def raster_extent(
     t0, t1, f0, f1 = b
     hop, sr = cfg.hop, sample_rate
     fk0, fk1 = cfg.full_frame_range(n_samples)
-    k0 = max(fk0, int(math.floor(t0 * sr / hop)) - margin_frames)
-    k1 = min(fk1, int(math.ceil(t1 * sr / hop)) + 1 + margin_frames)
+    # support reaching a file edge: every frame centred beyond that edge covers edge samples too
+    k0 = fk0 if t0 <= 0.0 else max(fk0, int(math.floor(t0 * sr / hop)) - margin_frames)
+    k1 = fk1 if t1 >= duration else min(fk1, int(math.ceil(t1 * sr / hop)) + 1 + margin_frames)
     df = sr / cfg.n_fft
     b0 = max(0, int(math.floor(f0 / df)) - 1)
     b1 = min(cfg.n_bins, int(math.ceil(f1 / df)) + 2)
@@ -312,7 +316,8 @@ def rasterize(
     if k1 <= k0:
         return None
     hop, sr = cfg.hop, sample_rate
-    t = (np.arange(k0, k1) * (hop / sr))[:, None]
+    # frames centred outside the file take the membership at the file edge (see module docstring)
+    t = np.clip(np.arange(k0, k1) * (hop / sr), 0.0, n_samples / sr)[:, None]
     f = (np.arange(b0, b1) * (sr / cfg.n_fft))[None, :]
     data = selection.evaluate(t, f)
     if not np.any(data > 0):

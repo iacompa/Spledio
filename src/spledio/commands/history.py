@@ -627,51 +627,6 @@ class CompositeCommand(Command):
             c.release(store)
 
 
-def _audio_steps(cmd: Command):
-    """The audio changes a command made, in order: :class:`LayerPatch` objects, or
-    ``(layer_id, handle)`` for a step that replaced a layer's whole audio (the handle holds that
-    layer's audio from just before the step)."""
-    if isinstance(cmd, CompositeCommand):
-        for c in cmd.children:
-            yield from _audio_steps(c)
-    elif isinstance(cmd, PatchCommand):
-        yield from cmd.patches
-    elif isinstance(cmd, TimelineCommand):
-        yield from cmd.before.items()
-    elif isinstance(cmd, RemoveLayerCommand):
-        if cmd._handle is not None:
-            yield (cmd.layer.id, cmd._handle)
-    elif isinstance(getattr(cmd, "patch", None), LayerPatch):  # e.g. adjusted-area commands
-        yield cmd.patch
-
-
-def patch_versions(project: "Project", history: "History", index: int, p: LayerPatch) -> tuple[np.ndarray, np.ndarray]:
-    """(before, after): all rows of ``p``'s region just before and just after it was applied by
-    ``history.undo_stack[index]``, bit-exact (for difference / A-B listening; copies).
-
-    Only one version of each patch is stored, so the "after" samples are rebuilt: from the current
-    audio, undoing – on a copy of this region only – every later step that touched it."""
-    store = history.store
-    steps = [st for cmd in history.undo_stack[index:] for st in _audio_steps(cmd)]
-    later = steps[next(i for i, st in enumerate(steps) if st is p) + 1 :]
-    reset = next((i for i, st in enumerate(later) if not isinstance(st, LayerPatch) and st[0] == p.layer_id), None)
-    if reset is not None:  # the layer's whole audio was replaced later: start from its audio before that
-        region = np.array(store.get(later[reset][1])[:, p.start : p.end])
-        later = later[:reset]
-    else:
-        region = project.layer(p.layer_id).audio[:, p.start : p.end].copy()
-    for st in reversed(later):
-        if isinstance(st, LayerPatch) and st.layer_id == p.layer_id:
-            lo, hi = max(st.start, p.start), min(st.end, p.end)
-            if lo < hi:
-                held = store.get(st.held)  # applied: the samples from before that step
-                for i, c in enumerate(st.channels):
-                    region[c, lo - p.start : hi - p.start] = held[i, lo - st.start : hi - st.start]
-    before = region.copy()
-    write_rows(before, p.channels, 0, store.get(p.held))
-    return before, region
-
-
 class History:
     def __init__(self, store: PatchStore | None = None, limit: int = 200):
         self.store = store or PatchStore()
@@ -690,6 +645,11 @@ class History:
         while len(self.undo_stack) > self.limit:
             old = self.undo_stack.pop(0)
             old.release(self.store)
+            # The bottom of the stack is now the state *after* ``old``.
+            if self._saved_marker is old:
+                self._saved_marker = "empty"  # undoing everything returns to the saved state
+            elif isinstance(self._saved_marker, str) and self._saved_marker == "empty":
+                self._saved_marker = object()  # the saved state can no longer be reached
         self.applied_count += 1
 
     def execute(self, project, cmd: Command) -> Change:

@@ -50,8 +50,12 @@ independent uniform variables of ±0.5 LSB of the *target* bit depth, i.e.
 spread over (−1, +1) LSB with RMS 1/√6 LSB. Added before rounding, it makes
 the total quantisation error independent of the signal (RMS 0.5 LSB, flat
 spectrum) instead of signal-correlated distortion. It is plain white TPDF,
-not noise-shaped; it is applied everywhere, including digital silence; it is
-never applied to float export. ``settings.seed`` makes it reproducible.
+not noise-shaped, and it is never applied to float export. It is skipped
+when nothing needs rounding: if no gain, limiter or clip is applied and every
+sample is already an exact code of the target depth (an unedited 16-bit file
+exported as 16- or 24-bit, digital silence), the codes are written as they
+are and ``ExportResult.dithered`` is False. ``settings.seed`` makes it
+reproducible.
 
 Safety: the file is written to a hidden temporary file in the destination
 folder (``.<name>.<random>.partial<ext>``), fsynced (plus ``F_FULLFSYNC`` on
@@ -336,6 +340,21 @@ class ExportResult:
     peak_before: PeakReport
     format: str
     saturated_samples: int
+
+
+def _on_integer_grid(x: np.ndarray, step: float) -> bool:
+    """True iff every sample of ``x`` is exactly a code of the integer format with LSB ``step``.
+
+    Checked block by block (stops at the first sample that needs rounding), so a
+    long file costs at most one extra block of memory.
+    """
+    scale = 1.0 / step
+    lo, hi = -scale, scale - 1.0
+    for a in range(0, x.shape[1], _BLOCK):
+        y = np.asarray(x[:, a : a + _BLOCK], dtype=np.float64) * scale
+        if y.size and (y.min() < lo or y.max() > hi or not np.array_equal(y, np.rint(y))):
+            return False
+    return True
 
 
 def quantization_step(subtype: str) -> float | None:
@@ -709,6 +728,11 @@ def export_audio(
             else:  # "clip"
                 hard_clip = True
                 clipped = peaks.samples_over
+
+    if dithered and gain == 1.0 and lim_gain is None and not hard_clip and _on_integer_grid(work, step):
+        # Every sample is already an exact code of the target depth (an unedited 16-bit file
+        # exported as 16-bit, digital silence, ...): nothing is rounded, so dither would only add noise.
+        dithered = False
 
     def write(fd: int) -> int:
         saturated = 0
