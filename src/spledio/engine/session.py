@@ -683,11 +683,15 @@ class EditorSession:
         if frames <= 0:
             raise EditError("A project cannot be shortened to zero length")
         cmd: Command = TimelineCommand(label, self.project, self.history.store, new, frames, params)
+        children = [cmd]
         had_areas = bool(self.areas)
         if had_areas:  # area components no longer line up with the audio: keep their effect, stop tracking them
-            cmd = CompositeCommand(label, [cmd, AreasStateCommand("areas", self, self.areas, ())], params)
+            children.append(AreasStateCommand("areas", self, self.areas, ()))
+        if self.selection is not None:  # it no longer lines up either; part of the same step, so undo brings it back
+            children.append(SelectionCommand("selection", self, self.selection, None))
+        if len(children) > 1:
+            cmd = CompositeCommand(label, children, params)
         change = cmd.redo(self.project, self.history.store)
-        self.set_selection(None)
         res = self._commit(cmd, change)
         res.warnings.append("Time operation rippled ALL layers to keep them in sync. Markers were not moved.")
         if had_areas:

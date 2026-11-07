@@ -377,6 +377,27 @@ def test_delete_and_crop_time_use_the_drawn_span_not_the_feather(session):
     assert s.time_range_samples() == (int(1.0 * SR), int(1.2 * SR))  # what the confirmation shows
 
 
+@pytest.mark.parametrize("op", ["delete", "crop", "insert"])
+@pytest.mark.parametrize("record_selection", [False, True])
+def test_undoing_a_time_edit_brings_back_the_selection_it_cleared(session, op, record_selection):
+    """A time edit clears the selection (it no longer lines up with the audio). Undo restored the
+    audio but left the selection empty, so the user had to draw it again."""
+    s = session
+    s.record_selection_history = record_selection
+    sel = Selection.of(RectShape(1.0, 1.2, 2300, 2700), feather_t=0.05)
+    s.set_selection(sel)
+    steps = len(s.history.undo_stack)
+    {"delete": s.delete_time, "crop": s.crop_time, "insert": lambda: s.insert_silence(0.5, 0.25)}[op]()
+    assert s.selection is None
+    assert len(s.history.undo_stack) == steps + 1  # one undo step, not a separate "selection cleared"
+    s.undo()
+    assert s.selection == sel
+    s.redo()
+    assert s.selection is None
+    s.undo()
+    assert s.selection == sel
+
+
 # ---------------------------------------------------------------- 18. clipping
 def test_boost_triggers_clipping_warning_and_float_export_not_clipped(session, tmp_path):
     from spledio.audio.export import ClippingError
