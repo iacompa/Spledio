@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<title>Spledio icon, concept C (Hush)</title>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E4DEFF"/>
+</linearGradient>
+<radialGradient id="sheen" cx="0.25" cy="0.08" r="0.85">
+  <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.42"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+</radialGradient>
+<clipPath id="tile-clip"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+<filter id="tile-shadow" x="-15%" y="-15%" width="130%" height="135%">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="22" result="b"/>
+  <feOffset in="b" dy="16" result="o"/>
+  <feFlood flood-color="#4B3A9E" flood-opacity="0.35"/>
+  <feComposite in2="o" operator="in" result="s"/>
+  <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+<filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+  <feGaussianBlur stdDeviation="14"/>
+</filter>
+
+<linearGradient id="c-wave" gradientUnits="userSpaceOnUse" x1="150" y1="0" x2="874" y2="0">
+  <stop offset="0" stop-color="#3FB8FF"/><stop offset="0.5" stop-color="#8B6CFF"/><stop offset="1" stop-color="#FF5FA8"/>
+</linearGradient>
+<filter id="c-drop" x="-20%" y="-30%" width="140%" height="160%">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="b"/>
+  <feOffset in="b" dy="14" result="o"/>
+  <feFlood flood-color="#4B3A9E" flood-opacity="0.28"/>
+  <feComposite in2="o" operator="in" result="s"/>
+  <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+</defs>
+<g filter="url(#tile-shadow)"><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/></g>
+<g clip-path="url(#tile-clip)">
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sheen)"/>
+<rect x="392" y="300" width="240" height="424" rx="44" fill="#8B6CFF" fill-opacity="0.12" stroke="#3A2346" stroke-width="16" stroke-dasharray="44 30" stroke-linecap="round"/>
+<g filter="url(#c-drop)"><path d="M150.0,512.0 C152.5,502.4 160.1,471.9 165.1,454.1 C170.2,436.4 175.2,418.8 180.2,405.2 C185.3,391.7 190.3,380.1 195.4,372.9 C200.4,365.7 205.5,361.8 210.5,362.0 C215.5,362.3 220.6,366.7 225.6,374.4 C230.7,382.0 235.7,394.1 240.8,408.0 C245.8,421.9 250.8,439.8 255.9,457.8 C260.9,475.8 266.0,496.6 271.0,515.9 C276.0,535.2 281.1,555.9 286.1,573.5 C291.2,591.1 296.2,608.3 301.2,621.5 C306.3,634.7 311.3,645.8 316.4,652.6 C321.4,659.3 326.5,662.6 331.5,661.9 C336.5,661.1 341.6,656.1 346.6,648.0 C351.7,639.9 356.7,627.3 361.8,613.1 C366.8,598.9 371.8,580.7 376.9,562.5 C381.9,544.4 389.5,513.9 392.0,504.1" fill="none" stroke="url(#c-wave)" stroke-width="64" stroke-linecap="round"/></g><path d="M150.0,512.0 C152.5,502.4 160.1,471.9 165.1,454.1 C170.2,436.4 175.2,418.8 180.2,405.2 C185.3,391.7 190.3,380.1 195.4,372.9 C200.4,365.7 205.5,361.8 210.5,362.0 C215.5,362.3 220.6,366.7 225.6,374.4 C230.7,382.0 235.7,394.1 240.8,408.0 C245.8,421.9 250.8,439.8 255.9,457.8 C260.9,475.8 266.0,496.6 271.0,515.9 C276.0,535.2 281.1,555.9 286.1,573.5 C291.2,591.1 296.2,608.3 301.2,621.5 C306.3,634.7 311.3,645.8 316.4,652.6 C321.4,659.3 326.5,662.6 331.5,661.9 C336.5,661.1 341.6,656.1 346.6,648.0 C351.7,639.9 356.7,627.3 361.8,613.1 C366.8,598.9 371.8,580.7 376.9,562.5 C381.9,544.4 389.5,513.9 392.0,504.1" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" opacity="0.45" transform="translate(-6 -14)"/><g filter="url(#c-drop)"><path d="M632.0,504.1 C634.5,494.6 642.1,464.4 647.1,447.0 C652.2,429.6 657.2,412.7 662.2,399.9 C667.3,387.1 672.3,376.4 677.4,370.1 C682.4,363.9 687.5,361.1 692.5,362.3 C697.5,363.6 702.6,369.1 707.6,377.7 C712.7,386.3 717.7,399.3 722.8,413.8 C727.8,428.4 732.8,446.9 737.9,465.2 C742.9,483.5 748.0,504.5 753.0,523.8 C758.0,543.0 763.1,563.4 768.1,580.5 C773.2,597.7 778.2,614.3 783.2,626.7 C788.3,639.1 793.3,649.3 798.4,655.1 C803.4,660.9 808.5,663.1 813.5,661.4 C818.5,659.6 823.6,653.6 828.6,644.5 C833.7,635.5 838.7,622.1 843.8,607.2 C848.8,592.3 853.8,573.5 858.9,555.1 C863.9,536.6 871.5,506.1 874.0,496.3" fill="none" stroke="url(#c-wave)" stroke-width="64" stroke-linecap="round"/></g><path d="M632.0,504.1 C634.5,494.6 642.1,464.4 647.1,447.0 C652.2,429.6 657.2,412.7 662.2,399.9 C667.3,387.1 672.3,376.4 677.4,370.1 C682.4,363.9 687.5,361.1 692.5,362.3 C697.5,363.6 702.6,369.1 707.6,377.7 C712.7,386.3 717.7,399.3 722.8,413.8 C727.8,428.4 732.8,446.9 737.9,465.2 C742.9,483.5 748.0,504.5 753.0,523.8 C758.0,543.0 763.1,563.4 768.1,580.5 C773.2,597.7 778.2,614.3 783.2,626.7 C788.3,639.1 793.3,649.3 798.4,655.1 C803.4,660.9 808.5,663.1 813.5,661.4 C818.5,659.6 823.6,653.6 828.6,644.5 C833.7,635.5 838.7,622.1 843.8,607.2 C848.8,592.3 853.8,573.5 858.9,555.1 C863.9,536.6 871.5,506.1 874.0,496.3" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" opacity="0.45" transform="translate(-6 -14)"/>
+<g filter="url(#c-drop)"><path d="M392.0,509.5 C394.5,506.5 402.0,496.9 407.0,491.3 C412.0,485.8 417.0,480.4 422.0,476.3 C427.0,472.2 432.0,468.8 437.0,466.8 C442.0,464.7 447.0,463.7 452.0,464.1 C457.0,464.4 462.0,466.0 467.0,468.7 C472.0,471.3 477.0,475.3 482.0,479.9 C487.0,484.4 492.0,490.2 497.0,496.0 C502.0,501.7 507.0,508.4 512.0,514.5 C517.0,520.6 522.0,527.1 527.0,532.7 C532.0,538.2 537.0,543.6 542.0,547.7 C547.0,551.8 552.0,555.2 557.0,557.2 C562.0,559.3 567.0,560.3 572.0,559.9 C577.0,559.6 582.0,558.0 587.0,555.3 C592.0,552.7 597.0,548.7 602.0,544.1 C607.0,539.6 612.0,533.8 617.0,528.0 C622.0,522.3 629.5,512.6 632.0,509.5" fill="none" stroke="#B9A9FF" stroke-width="64" stroke-linecap="round"/></g>
+<path d="M542,360 h34 l-34,40 h34" fill="none" stroke="#3A2346" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/><path d="M588,322 h24 l-24,28 h24" fill="none" stroke="#3A2346" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<circle cx="392" cy="300" r="26" fill="#FFFFFF" stroke="#3A2346" stroke-width="12"/><circle cx="632" cy="300" r="26" fill="#FFFFFF" stroke="#3A2346" stroke-width="12"/><circle cx="392" cy="724" r="26" fill="#FFFFFF" stroke="#3A2346" stroke-width="12"/><circle cx="632" cy="724" r="26" fill="#FFFFFF" stroke="#3A2346" stroke-width="12"/>
+</g>
+</svg>
