@@ -4,7 +4,9 @@
 > Apple Silicon). `scripts/release_macos.sh` builds it with the official python.org Python (fetched by
 > `scripts/get_build_python.sh`, nothing installed), signs, notarizes and staples it, and Gatekeeper accepts
 > the downloaded DMG. See [First signed and notarized build](#first-signed-and-notarized-build-2026-11-07).
-> **Published:** [Spledio 1.1](https://github.com/iacompa/Spledio/releases/tag/v1.1) on GitHub Releases (2026-11-07).
+> **Published:** [Spledio 1.3](https://github.com/iacompa/Spledio/releases/tag/v1.3), the latest, and
+> [Spledio 1.1](https://github.com/iacompa/Spledio/releases/tag/v1.1), both on GitHub Releases (2026-11-07). See
+> [Release 1.3](#release-13-2026-11-07).
 > **Not done yet:** a test on a second Mac, ideally one running macOS 15.
 
 Why this matters: macOS Gatekeeper blocks apps downloaded from the internet unless they are **signed with a
@@ -146,6 +148,33 @@ or 1. Use it on any build, including a downloaded one. It checks:
 * save + reopen of a project gives the identical mix.
 
 It does not play audible sound and leaves no files behind.
+
+## Release 1.3 (2026-11-07)
+
+Published as [v1.3](https://github.com/iacompa/Spledio/releases/tag/v1.3). The tag points to commit `a31e5f2`. Command, from a clean
+checkout of that commit:
+
+```bash
+PYTHON="$(scripts/get_build_python.sh)" \
+SIGN_IDENTITY="Developer ID Application: IA COMPA LLC (L98358T6WZ)" \
+NOTARY_PROFILE=Dawnamite-Developer-ID-L98358T6WZ \
+scripts/release_macos.sh
+```
+
+| Check | Result |
+|---|---|
+| Tests | Run by the script on `a31e5f2`: 515 passed, 1 skipped. With `SPLEDIO_AUDIO_TEST=1`: 516 passed. |
+| Bundle identifier, version, minimum macOS | `com.iacompa.spledio`, 1.3, **15.0** |
+| Smoke test | **PASSED** unsigned, after Developer ID signing, and on a copy taken out of the notarized DMG. An unsigned build of the same code passed it on 13 files: WAV (16-bit, 24-bit, float), W64, RF64, FLAC (stereo and 44.1 kHz mono), AIFF, CAF/ALAC, MP3, Ogg Vorbis, Opus and a 6-channel WAV. |
+| `codesign --verify --deep --strict` | OK; Team ID L98358T6WZ, hardened runtime, secure timestamp |
+| Notarization | **Accepted** (submission `79dd444e-68de-4a3a-a9c3-443428d21e2f`) |
+| Stapling | `stapler staple` and `stapler validate` worked |
+| Gatekeeper on a downloaded copy | DMG with a browser quarantine flag: `spctl -t open` **accepted**, "Notarized Developer ID". The app copied out of it, also quarantined: `spctl -t exec` **accepted**. |
+| DMG | `Spledio-macOS-arm64.dmg`, 61.5 MB, SHA-256 `a71967cfada77a8b137eeecc339af318293214613465a80aa649b9761f693e1c` |
+| Source archives | `Spledio-1.3-source.tar.gz` (identical to `git archive` of `a31e5f2`) and the 11 archives in `dist/third-party-sources/` (all match `SHA256SUMS`) |
+| Published release | 16 files, as for 1.1. Downloaded anonymously afterwards: `releases/latest/download/Spledio-macOS-arm64.dmg` and the `v1.3` link both match the published SHA-256, and the source tarball matches byte for byte. |
+
+Not checked: the first-launch Gatekeeper dialog on another Mac, and macOS 15.
 
 ## First signed and notarized build (2026-11-07)
 

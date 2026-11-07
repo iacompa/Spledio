@@ -60,9 +60,15 @@ the GPL requires (see below).
 - [x] **Minimum macOS: 15.0** (Sequoia). The release script reads it from the app's binaries and prints
       it; it is on the page and in the user manual. Put it in each release's notes.
 - [x] **Make the repository public** (the page and the app link to it for the source code).
-- [x] **Publish the GitHub release** (tag `v1.1`, 2026-11-07) with the DMG, its `.sha256` file, `Spledio-1.1-source.tar.gz`,
+- [x] **Publish the GitHub release** (tag `v1.1`, 2026-11-07; then `v1.3`, the same day) with the DMG, its `.sha256` file, `Spledio-1.1-source.tar.gz`,
       the files in `dist/third-party-sources/` and release notes. The source archives are required by the GPL/LGPL.
-- [ ] Put `website/spledio/` on the site and click every link once.
+- [x] **Page live** at [iacompa.com/apps/spledio](https://iacompa.com/apps/spledio), Spanish at
+      `/es/aplicaciones/spledio`, with privacy, terms and support pages (2026-11-07). It lives in the website
+      repository `iacompa/ia-compa-website`: the `spledio` entry in `src/content/apps.ts` (and `spanish/apps.ts`,
+      `app-legal.ts`), the walkthrough in `src/components/apps/spledio-showcase.tsx` and the screenshots in
+      `public/apps/spledio/v1-3/`. Merged as PR #114 (`6dddd84`) and deployed to production from that commit.
+      All eight pages and every link on them were checked on the live site. `website/spledio/index.html` here
+      stays as a standalone copy.
 
 ## License wording (use as-is)
 
@@ -93,5 +99,11 @@ Keep it that way if analytics are ever added to the site, or say so on the page.
 3. `scripts/release_macos.sh`, which builds, signs, notarizes, staples and verifies the DMG.
 4. Tag `vX.Y.Z`, push, and create the GitHub release with `Spledio-macOS-arm64.dmg`, its `.sha256` file,
    `Spledio-X.Y.Z-source.tar.gz` and `dist/third-party-sources/*` (the script prints the `gh release create` line).
-5. The website needs no change, because the download link always points to the newest release.
-   Update the manual only if features changed.
+5. Update the website: the iacompa.com page links the release by its tag (download, source archive,
+   license) and shows the version. In `iacompa/ia-compa-website`, change the `spledio` entry in
+   `src/content/apps.ts`, its Spanish copy and `src/content/spledio.test.ts` to the new tag, and
+   retake the screenshots if the window changed. Run its tests and build, open a PR and merge it. The site
+   does **not** deploy `main` automatically (`vercel.json` turns it off): deploy the merge commit to production
+   from a clean checkout with the Vercel CLI (`vercel deploy --prod`, project `ia-compa-website`), then open
+   `/apps/spledio` and click every link. `releases/latest/download/Spledio-macOS-arm64.dmg` always gives the
+   newest DMG in the meantime. Update the manual only if features changed.
