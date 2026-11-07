@@ -124,16 +124,21 @@ bundled. The library-replacement steps in `licenses/SOURCE-AND-REPLACING-LIBRARI
 copy of the app with a modified `libsndfile_arm64.dylib`: smoke test **PASSED** (details in
 [RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07)).
 
+**First Developer ID signed and notarized build** (commit `b47334c`, new icon, bundle id `com.iacompa.spledio`):
+425 passed, 1 skipped (run on that commit just before the build). Smoke test **PASSED** unsigned, after
+signing, and on a copy taken out of the notarized DMG. Notarization **Accepted** with no issues; stapled.
+Gatekeeper (`spctl`) **accepts** a quarantined copy of the DMG and the app copied out of it as "Notarized
+Developer ID". Details in
+[RELEASE_MACOS.md](RELEASE_MACOS.md#first-signed-and-notarized-build-2026-11-07).
+
 ## Not tested
 
 * Windows and Linux: no installers built, and the `.bat`/`.sh` setup scripts have not been run there.
-* A **Developer ID signed and notarized** build, and Gatekeeper on a downloaded DMG. Only the unsigned
-  (ad-hoc) build above was made; it needs an Apple Developer membership.
 * The packaged app on **another Mac**, and on macOS 15–26. The app declares macOS 15.0 as its minimum,
   but it has only been run on this Mac (macOS 27).
 * **Audible** playback inside the packaged app. The smoke test runs the real output stream with silence;
   audible playback was tested from source (see above).
-* The website page `website/spledio/index.html`: layout previewed in a browser; links point to the GitHub repository, which is still private.
+* The website page `website/spledio/index.html`: layout previewed in a browser; links point to the GitHub repository (public since 2026-11-07); not clicked through since.
 * The opt-in real-device unit test in this record (see above).
 * Very long files (> 30 min) for memory and speed.
 * Screen readers.

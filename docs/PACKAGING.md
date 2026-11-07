@@ -1,8 +1,8 @@
 # Packaging
 
 > **macOS: use [RELEASE_MACOS.md](RELEASE_MACOS.md) and `scripts/release_macos.sh`.** That script is the
-> working, tested recipe for the macOS PyInstaller build: an unsigned local `.app`/`.dmg` was built
-> and passed the smoke test on 2026-11-07. Signing with a Developer ID and notarization are **not done yet**.
+> working, tested recipe for the macOS PyInstaller build: it produced a Developer ID signed, notarized and
+> stapled `.app`/`.dmg` that passed the smoke test and Gatekeeper on 2026-11-07.
 > The macOS notes below are the original research behind it. Where they disagree with the script,
 > the script wins.
 >
@@ -166,7 +166,7 @@ Status 2026-11-07: done in `scripts/release_macos.sh`, the app and `licenses/`
    GPL-only Qt add-ons. Spledio uses none of them. See
    [`DEPENDENCY_INVENTORY.md`](DEPENDENCY_INVENTORY.md).
 
-### 5. Code signing and notarization (ad-hoc signing tested; Developer ID + notarization NOT YET TESTED)
+### 5. Code signing and notarization (done with `scripts/release_macos.sh`, 2026-11-07)
 
 Needs an Apple Developer Program membership and a **Developer ID
 Application** certificate.
@@ -193,7 +193,8 @@ spctl -a -vvv -t open --context context:primary-signature dist/Spledio-0.1.0-arm
   the PortAudio/cffi output callback ran under the hardened runtime **without**
   `allow-unsigned-executable-memory` (smoke test, 2026-11-07). Library validation had to
   be turned off for that ad-hoc build only, because ad-hoc signatures have no Team ID.
-  A Developer ID build should need no entitlements at all. **To confirm** on the first signed build.
+  **Confirmed** on the first Developer ID build (2026-11-07): it needs no entitlements at all; the smoke
+  test, including the output stream, passed under the hardened runtime with the empty entitlements file.
 - Signing all frameworks inside-out with `--deep` alone is unreliable. Sign
   nested `*.framework` bundles explicitly if `codesign --verify` complains.
 - Notarization does not stop users from replacing LGPL libraries. They

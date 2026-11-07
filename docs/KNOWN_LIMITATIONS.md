@@ -65,7 +65,7 @@ Honest list of what is missing, rough, or only partly verified. See
 | Intel Macs | Not supported by the packaged app (Apple Silicon only); running from source there is not tested |
 | Windows | Setup/run `.bat` scripts written, **not tested** |
 | Linux | Expected to work (pure Python + wheels with bundled libsndfile/PortAudio); **not tested** |
-| macOS `.app`/`.dmg` | **Local test build works** for macOS 15+ (built and smoke-tested 2026-11-07). Not yet signed with a Developer ID or notarized, so other Macs block it. See [RELEASE_MACOS.md](RELEASE_MACOS.md). |
+| macOS `.app`/`.dmg` | **Signed with a Developer ID and notarized** for macOS 15+ (built 2026-11-07; Gatekeeper accepts the downloaded DMG). Not yet tried on a second Mac. See [RELEASE_MACOS.md](RELEASE_MACOS.md). |
 | Windows/Linux installers (.exe/.msi, AppImage) | **Not built yet**. See [PACKAGING.md](PACKAGING.md). |
 
 ## Accessibility

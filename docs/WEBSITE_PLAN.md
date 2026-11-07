@@ -43,22 +43,23 @@ the GPL requires (see below).
 
 ## Must happen before the page goes live
 
-- [ ] **Make the GitHub repository public.** It is private today, so every link above returns 404 for
-      visitors. A public repository is also the simplest way to meet the GPL source requirement.
-- [ ] **Apple Developer Program** membership (paid yearly by Apple) and a **Developer ID Application**
-      certificate. Without them macOS blocks the downloaded app. See [RELEASE_MACOS.md](RELEASE_MACOS.md).
+- [x] **Make the GitHub repository public** (2026-11-07, GPL-3.0-only). A public repository is also the
+      simplest way to meet the GPL source requirement.
+- [x] **Apple Developer Program** membership and a **Developer ID Application** certificate
+      (IA COMPA LLC, team L98358T6WZ). See [RELEASE_MACOS.md](RELEASE_MACOS.md).
 - [x] **First unsigned local build** with `scripts/release_macos.sh`: `.app` and `.dmg` built and passed the
       smoke test (2026-11-07; see [RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07)).
 - [x] **Build with the python.org Python** (`scripts/get_build_python.sh`, nothing to install). The app
       now runs on macOS 15 or later.
 - [x] **License texts in the bundle** (2026-11-07): every notice is in `Contents/Resources/licenses/` and in
       Help ▸ Licenses and Notices (`THIRD_PARTY_NOTICES.md`, "Status of the notices"). Open: libquadmath's GCC version.
-- [ ] **First signed and notarized build**, made with `scripts/release_macos.sh`.
+- [x] **First signed and notarized build**, made with `scripts/release_macos.sh` (2026-11-07; Gatekeeper
+      accepts the downloaded DMG; see [RELEASE_MACOS.md](RELEASE_MACOS.md#first-signed-and-notarized-build-2026-11-07)).
 - [ ] **Test the DMG on a clean Mac** (or a new user account): download from the release URL, open, edit,
       play, export, save and reopen.
 - [x] **Minimum macOS: 15.0** (Sequoia). The release script reads it from the app's binaries and prints
       it; it is on the page and in the user manual. Put it in each release's notes.
-- [ ] **Make the repository public** (the page and the app link to it for the source code).
+- [x] **Make the repository public** (the page and the app link to it for the source code).
 - [ ] **Publish the GitHub release** (tag `v0.1.0`) with the DMG, its `.sha256` file, `Spledio-0.1.0-source.tar.gz`,
       the files in `dist/third-party-sources/` and release notes. The source archives are required by the GPL/LGPL.
 - [ ] Put `website/spledio/` on the site and click every link once.
