@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spledio"
-version = "1.1"
+version = "1.3"
 description = "Spledio: a free, local spectral audio editor (working title: Spectral Workshop)"
 readme = "README.md"
 license = "GPL-3.0-only"

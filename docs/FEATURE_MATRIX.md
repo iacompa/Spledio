@@ -1,4 +1,4 @@
-# Feature matrix (v1.1)
+# Feature matrix (v1.3)
 
 Status legend:
 
