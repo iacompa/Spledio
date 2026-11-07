@@ -151,9 +151,10 @@ Apple Silicon Mac with macOS 27.0.1, PyInstaller 6.22.3 with pyinstaller-hooks-c
 
 | | |
 |---|---|
-| `dist/Spledio.app` | 126 MB. Qt frameworks: QtCore, QtGui, QtWidgets, QtDBus, QtSvg (before pruning there were also QtPdf, QtVirtualKeyboard(+Qml), QtQuick, QtQml(+Meta, Models, WorkerScript), QtOpenGL and QtNetwork). Qt plugins: `platforms/libqcocoa` (+ minimal, offscreen), `styles/libqmacstyle`, `imageformats/libqsvg`, `iconengines/libqsvgicon`. |
+| `dist/Spledio.app` | 125 MB. Qt frameworks: QtCore, QtGui, QtWidgets, QtDBus, QtSvg (before pruning there were also QtPdf, QtVirtualKeyboard(+Qml), QtQuick, QtQml(+Meta, Models, WorkerScript), QtOpenGL and QtNetwork). Qt plugins: `platforms/libqcocoa` (+ minimal, offscreen), `styles/libqmacstyle`, `imageformats/libqsvg`, `iconengines/libqsvgicon`. |
 | Other native libraries | `libsndfile_arm64`, `libportaudio`, scipy's `libgfortran.5`, `libgcc_s.1.1` and `libquadmath.0`, `libpyside6`/`libshiboken6`, and from the Homebrew interpreter: OpenSSL 3.6.4 (`libssl.3`, `libcrypto.3`), xz 5.8.4 (`liblzma.5`), zstd 1.5.7 (`libzstd.1`), mpdecimal 4.0.1 (`libmpdec.4`). No FFmpeg, WebEngine, Pdf or Multimedia. |
-| `dist/Spledio-macOS-arm64.dmg` | 57 MB, `hdiutil verify` valid, checksum file matches. |
+| `dist/Spledio-macOS-arm64.dmg` | 56 MB, `hdiutil verify` valid, checksum file matches. |
+| Final full run (with tests, PyInstaller pinned) | `UNSIGNED=1 PYTHON=/opt/homebrew/bin/python3.14 scripts/release_macos.sh`: 418 passed, 1 skipped; both smoke tests **PASSED**; DMG built; **118 s** in total. |
 | Smoke test, unsigned app | **PASSED** (all checks) |
 | Smoke test, ad-hoc signed app (hardened runtime on) | **PASSED**: output stream ran on "MacBook Pro Speakers", 18.3 ms latency. So the cffi audio callback works under the hardened runtime **without** `allow-unsigned-executable-memory`. |
 | Launched through `open` (like a Finder double-click) | smoke test **PASSED**; a normal launch opened the main window with the file and its spectrogram |

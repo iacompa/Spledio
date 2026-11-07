@@ -16,8 +16,11 @@ This page records only what was actually run. Nothing here is projected or assum
 .venv/bin/python -m pytest -q
 ```
 
-Result: **416 passed, 1 skipped in 133 s** (417 collected). An earlier run of the same suite took 27 s;
-the time varies with how busy the machine is.
+Result: **418 passed, 1 skipped in 28 s** (419 collected), run by `scripts/release_macos.sh` before the
+final packaged build. The time varies a lot with how busy the machine is: one run took 133 s, and one
+during heavy load took 412 s. That slow run exposed a real bug: quick level presses could become
+separate undo steps when rendering was slow. It is fixed, and a regression test was added
+(`test_merge_counts_from_the_press_not_from_when_rendering_finished`).
 
 The skipped test is `tests/test_playback.py` real-device test. It is opt-in because it plays sound
 through the default output (`SPLEDIO_AUDIO_TEST=1`). It was **not** run for this record. Real-device
@@ -34,9 +37,9 @@ playback was instead checked in the real-app run below.
 | `test_session.py` | 22 | save/reopen bit-exact, portable projects, relink with SHA-256, malicious archives rejected, autosave/recovery |
 | `test_ui_canvas.py` | 20 | canvas tools, selection drawing, zoom/pan, crosshair |
 | `test_ui_modules.py` | 12 | Preview / Bypass / Apply / Cancel through the Edit panel, tutorials |
-| `test_areas.py` | 10 | adjusted areas: 1 dB / 6 dB step sequence, silence and back is exact, independent and overlapping areas, merge of rapid presses into one undo step, locked layer, removed area refused, save/reopen, timeline freeze + undo |
+| `test_areas.py` | 11 | adjusted areas: 1 dB / 6 dB step sequence, silence and back is exact, independent and overlapping areas, merge of rapid presses into one undo step (counted from the key press, so a slow render does not split them), locked layer, removed area refused, save/reopen, timeline freeze + undo |
 | `test_ui_areas.py` | 4 | real main window: ↑/↓/+/−/Shift/0 keys, click-to-pick, Delete removes, Highlight toggle, Areas panel, level bar (− / + / slider / Silence / ✕, placement, no busy flash, actions not left disabled), zoom shortcuts |
-| `test_ui_workflow.py` | 3 | real main window, core resonance workflow end to end, every enabled action triggered once without error |
+| `test_ui_workflow.py` | 4 | real main window, core resonance workflow end to end, every enabled action triggered once without error, `--smoke-test` mode passes |
 
 UI tests run headless (`QT_QPA_PLATFORM=offscreen`) against the real `MainWindow` with a fake audio device
 whose output buffer is pulled and measured.
@@ -87,11 +90,35 @@ user-facing actions on the bundled demo file (`scripts/make_fixture.py`: 8 s, 48
 When the window was not the active window (someone using another app), key presses sent by the script
 were not delivered as shortcuts, which is normal macOS behaviour. The offscreen tests cover the key logic.
 
+## Packaged macOS app (unsigned local build, 2026-11-07)
+
+Built with `UNSIGNED=1 PYTHON=/opt/homebrew/bin/python3.14 scripts/release_macos.sh`. Full details,
+bundle contents and the fixes the first runs needed are in
+[RELEASE_MACOS.md](RELEASE_MACOS.md#first-local-build-2026-11-07).
+
+`Spledio --smoke-test FILE` runs inside the packaged app and checks it (list of checks in
+RELEASE_MACOS.md). Results:
+
+| Where it ran | Result |
+|---|---|
+| `dist/Spledio.app`, before signing | **PASSED**, all 9 checks |
+| same app, ad-hoc signed, hardened runtime on | **PASSED**, all 9; the output stream ran on "MacBook Pro Speakers", 18.3 ms latency |
+| launched with `open` (as Finder does) | **PASSED**, all 9 |
+| app copied out of the mounted `Spledio-macOS-arm64.dmg` | `codesign --verify --deep --strict` valid; smoke test **PASSED**, all 9 |
+| normal launch with a file, no test flags | main window opened with the file, spectrogram and all panels (screenshot taken); nothing printed to stderr |
+
+Limits of this build: it runs only on **macOS 26 or later**, because the Homebrew Python it was frozen
+from targets macOS 26. It is ad-hoc signed, so Gatekeeper rejects it (`spctl -a -t exec`: "rejected");
+only a notarized build passes Gatekeeper.
+
 ## Not tested
 
-* Windows and Linux. The `.bat`/`.sh` setup scripts for those platforms have not been run there.
-* Packaged builds (no `.app`/installer has been built yet; see [PACKAGING.md](PACKAGING.md)).
-* `scripts/release_macos.sh` (signing, notarization, DMG): syntax-checked with bash 3.2 and shellcheck only, never run.
+* Windows and Linux: no installers built, and the `.bat`/`.sh` setup scripts have not been run there.
+* A **Developer ID signed and notarized** build, and Gatekeeper on a downloaded DMG. Only the unsigned
+  (ad-hoc) build above was made; it needs an Apple Developer membership.
+* The packaged app on **another Mac** or on macOS older than 26. This build cannot run there; see above.
+* **Audible** playback inside the packaged app. The smoke test runs the real output stream with silence;
+  audible playback was tested from source (see above).
 * The website page `website/spledio/index.html`: layout previewed in a browser; links point to the GitHub repository, which is still private.
 * The opt-in real-device unit test in this record (see above).
 * Very long files (> 30 min) for memory and speed.
