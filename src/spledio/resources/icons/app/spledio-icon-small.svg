@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>App icon (small sizes)</title>
+  <!--
+    Simplified variant for 16 and 32 px. Every edge sits on a 64-unit grid,
+    so one grid step is exactly 1 px at 16x16 and 2 px at 32x32.
+  -->
+  <defs>
+    <linearGradient id="tileFill" gradientUnits="userSpaceOnUse" x1="0" y1="64" x2="0" y2="960">
+      <stop offset="0" stop-color="#1E2A5C"/>
+      <stop offset="1" stop-color="#0A0E2A"/>
+    </linearGradient>
+    <linearGradient id="top" gradientUnits="userSpaceOnUse" x1="192" y1="0" x2="704" y2="0">
+      <stop offset="0" stop-color="#D77BFF"/>
+      <stop offset="1" stop-color="#8A6CFF"/>
+    </linearGradient>
+    <linearGradient id="mid" gradientUnits="userSpaceOnUse" x1="128" y1="0" x2="896" y2="0">
+      <stop offset="0" stop-color="#FF8A5C"/>
+      <stop offset="1" stop-color="#FF5E78"/>
+    </linearGradient>
+    <linearGradient id="low" gradientUnits="userSpaceOnUse" x1="192" y1="0" x2="832" y2="0">
+      <stop offset="0" stop-color="#FFC95C"/>
+      <stop offset="0.6" stop-color="#FFA645"/>
+      <stop offset="1" stop-color="#FF7A57"/>
+    </linearGradient>
+  </defs>
+
+  <!-- tile -->
+  <path fill="url(#tileFill)" d="M371.26 64L652.74 64C741.21 64 785.45 64 825.34 77.16L833.07 79.06C885.06 97.98 926.02 138.94 944.94 190.93L946.84 198.66C960 238.55 960 282.79 960 371.26L960 652.74C960 741.21 960 785.45 946.84 825.34L944.94 833.07C926.02 885.06 885.06 926.02 833.07 944.94L825.34 946.84C785.45 960 741.21 960 652.74 960L371.26 960C282.79 960 238.55 960 198.66 946.84L190.93 944.94C138.94 926.02 97.98 885.06 79.06 833.07L77.16 825.34C64 785.45 64 741.21 64 652.74L64 371.26C64 282.79 64 238.55 77.16 198.66L79.06 190.93C97.98 138.94 138.94 97.98 190.93 79.06L198.66 77.16C238.55 64 282.79 64 371.26 64Z"/>
+
+  <!-- upper harmonic (cool, thin, decays early) -->
+  <rect x="192" y="192" width="512" height="64" rx="32" fill="url(#top)"/>
+
+  <!-- the resonance: hot outside the selection, reduced inside -->
+  <rect x="128" y="384" width="224" height="128" rx="32" fill="url(#mid)"/>
+  <rect x="672" y="384" width="224" height="128" rx="32" fill="url(#mid)"/>
+  <rect x="352" y="384" width="320" height="128" fill="#47358F"/>
+
+  <!-- fundamental (warm, thick) -->
+  <rect x="192" y="640" width="640" height="192" rx="32" fill="url(#low)"/>
+
+  <!-- selection outline -->
+  <path fill="#F2FAFF" fill-rule="evenodd" d="M320 320H704V576H320Z M384 384V512H640V384Z"/>
+</svg>

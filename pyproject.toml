@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spledio"
+version = "0.1.0"
+description = "Spledio: a free, local spectral audio editor (working title: Spectral Workshop)"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+# Exact, verified pins live in requirements.txt / requirements-dev.txt.
+dependencies = [
+  "PySide6>=6.10,<6.13",
+  "numpy>=2.2,<2.6",
+  "scipy>=1.15,<1.19",
+  "soundfile>=0.13,<0.15",
+  "sounddevice>=0.5,<0.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9.0,<10", "pytest-qt>=4.5,<5"]
+
+[project.scripts]
+spledio = "spledio.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+spledio = ["resources/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
+addopts = "-ra"

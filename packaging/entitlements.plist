@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the signed Spledio.app (used by scripts/release_macos.sh).
+
+  Start with none. Spledio needs no network, camera, microphone or file-system entitlements
+  (it is not sandboxed; files are opened through the normal open/save dialogs).
+
+  If the notarized app crashes when playback starts (sounddevice uses cffi callbacks), add
+      <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  rebuild, and note it in docs/RELEASE_MACOS.md. Avoid disable-library-validation.
+-->
+<plist version="1.0">
+<dict/>
+</plist>

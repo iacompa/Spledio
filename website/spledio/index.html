@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spledio – free spectral audio editor</title>
+<meta name="description" content="Spledio is a free, open-source audio editor for macOS. See your recording as a picture of its sound, draw around one sound and make just that part quieter, louder or silent.">
+<link rel="icon" href="icon.png">
+<!-- Self-contained: no external fonts, scripts or trackers. Adapt the styles to the site's design. -->
+<style>
+  :root {
+    --bg: #ffffff; --fg: #15181d; --dim: #5b6472; --card: #f4f6f9; --line: #dde2ea;
+    --accent: #2f7fd1; --accent-fg: #ffffff; --warm: #e8893a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171c; --fg: #dfe4ec; --dim: #9aa4b2; --card: #1b1f26; --line: #323a47;
+            --accent: #4fb3ff; --accent-fg: #0d1117; --warm: #f0a050; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
+  a { color: var(--accent); }
+  .hero { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+  .hero img { width: 128px; height: 128px; border-radius: 28px; }
+  .hero h1 { margin: 0; font-size: 40px; line-height: 1.1; }
+  .tagline { margin: 6px 0 0; color: var(--dim); font-size: 19px; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 8px; }
+  .btn { display: inline-block; padding: 12px 20px; border-radius: 10px; font-weight: 600; text-decoration: none;
+         border: 1px solid var(--line); color: var(--fg); background: var(--card); }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .meta { color: var(--dim); font-size: 14px; margin: 0; }
+  h2 { margin: 48px 0 12px; font-size: 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--dim); font-size: 15px; }
+  ol { padding-left: 22px; } li { margin: 6px 0; }
+  kbd { font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line);
+        border-bottom-width: 2px; border-radius: 5px; padding: 2px 6px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  td { border-top: 1px solid var(--line); padding: 7px 8px; vertical-align: top; }
+  td:first-child { white-space: nowrap; width: 1%; }
+  .note { border-left: 3px solid var(--warm); padding: 8px 14px; background: var(--card); border-radius: 0 8px 8px 0; }
+  footer { margin-top: 56px; color: var(--dim); font-size: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <img src="icon.png" alt="Spledio app icon">
+    <div>
+      <h1>Spledio</h1>
+      <p class="tagline">See your audio. Fix just the part that's wrong.</p>
+    </div>
+  </section>
+
+  <div class="actions">
+    <!-- "latest/download/<asset>" always points to the newest release; the release script names the asset exactly this -->
+    <a class="btn primary" href="https://github.com/iacompa/Spledio/releases/latest/download/Spledio-macOS-arm64.dmg">Download for Mac</a>
+    <a class="btn" href="https://github.com/iacompa/Spledio">View source on GitHub</a>
+    <a class="btn" href="https://github.com/iacompa/Spledio/blob/main/docs/USER_MANUAL.md">User manual</a>
+  </div>
+  <p class="meta">
+    Free and open source (GPL-3.0-only) · Mac with Apple Silicon (M1 or newer) ·
+    <a href="https://github.com/iacompa/Spledio/releases/latest">Release notes, version and checksum</a>
+  </p>
+
+  <h2>What it does</h2>
+  <div class="cards">
+    <div class="card"><h3>See the sound</h3><p>Your recording becomes a picture: time runs left to right, pitch bottom to top, and brightness shows loudness. A whistle, a hum or a ringing tone stands out as a bright line.</p></div>
+    <div class="card"><h3>Draw around it</h3><p>Box in just that sound. Click − or + to change its level 1 dB at a time, or silence it. Everything else stays exactly as it was, and no time is cut.</p></div>
+    <div class="card"><h3>Change your mind</h3><p>Every part you change stays outlined with its level. Click it to change it again, or remove the change and get the original audio back exactly.</p></div>
+    <div class="card"><h3>Private by design</h3><p>No account, no uploads, no internet connection. Your audio never leaves your Mac.</p></div>
+  </div>
+
+  <h2>Install</h2>
+  <ol>
+    <li>Click <strong>Download for Mac</strong> to get <code>Spledio-macOS-arm64.dmg</code>.</li>
+    <li>Open the downloaded file and drag <strong>Spledio</strong> into <strong>Applications</strong>.</li>
+    <li>Open Spledio from Applications. It is signed and notarized by Apple, so it opens like any other app.</li>
+  </ol>
+  <p class="note">Only download Spledio from this page or from the
+    <a href="https://github.com/iacompa/Spledio/releases">official GitHub releases</a>. Each release lists the file's SHA-256 checksum,
+    so you can check your download with <code>shasum -a 256 Spledio-macOS-arm64.dmg</code> in Terminal.</p>
+  <p>Windows and Linux: no installer yet. You can run it from the source code; see the
+    <a href="https://github.com/iacompa/Spledio#readme">README</a>. These platforms have not been tested yet.</p>
+
+  <h2>Your first edit</h2>
+  <ol>
+    <li>Drag an audio file onto the window (WAV, AIFF, FLAC, OGG or MP3). Your original file is never changed.</li>
+    <li>Draw a box around the sound you want to change.</li>
+    <li>In the small bar next to the box, click <strong>−</strong> to make it quieter or <strong>+</strong> to make it louder. You can also drag the slider or click <strong>Silence</strong>.</li>
+    <li>Press <kbd>Space</kbd> to listen. Changes are heard while it plays.</li>
+    <li><strong>File → Export Audio…</strong> (<kbd>⌘E</kbd>) saves the result as WAV or FLAC.</li>
+  </ol>
+
+  <h2>Handy keys</h2>
+  <table>
+    <tr><td><kbd>↓</kbd> <kbd>↑</kbd></td><td>Selected part 1 dB quieter / louder (<kbd>Shift</kbd> for 6 dB)</td></tr>
+    <tr><td><kbd>0</kbd></td><td>Silence the selected part</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Remove the change from a part you clicked</td></tr>
+    <tr><td><kbd>S</kbd> / <kbd>D</kbd></td><td>Hear only the selection / hear what an edit removes</td></tr>
+    <tr><td><kbd>⌘Z</kbd></td><td>Undo (up to 200 steps)</td></tr>
+    <tr><td><kbd>F1</kbd></td><td>Built-in step-by-step tutorials</td></tr>
+  </table>
+  <p>Everything else is in the <a href="https://github.com/iacompa/Spledio/blob/main/docs/USER_MANUAL.md">user manual</a>.</p>
+
+  <h2>License and source code</h2>
+  <p>Spledio is free software under the <strong>GNU General Public License, version 3 only (GPL-3.0-only)</strong>.
+    You can use it for anything, study and change the code, and share it, including your changes, under the same license.
+    It comes with no warranty. The full source code for every release is on
+    <a href="https://github.com/iacompa/Spledio">GitHub</a>, with the
+    <a href="https://github.com/iacompa/Spledio/blob/main/LICENSE">license text</a> and the
+    <a href="https://github.com/iacompa/Spledio/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a>
+    (Qt/PySide6 under LGPL-3.0, NumPy, SciPy, libsndfile, PortAudio and others).</p>
+
+  <h2>Help</h2>
+  <p>Found a bug or have a question? Open an issue on
+    <a href="https://github.com/iacompa/Spledio/issues">GitHub Issues</a>. Please include your Spledio version (Help → About), your macOS version and the steps that cause the problem.</p>
+
+  <footer>
+    Spledio is an independent project and is not affiliated with or endorsed by any maker of commercial audio software.
+  </footer>
+</main>
+</body>
+</html>

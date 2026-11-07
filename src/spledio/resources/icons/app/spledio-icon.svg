@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>App icon</title>
+  <!--
+    Master app icon (used for 48 px and larger; see spledio-icon-small.svg for
+    16/32 px). macOS Big Sur+ grid: 1024 canvas, 824x824 continuous-corner
+    tile at (100,100) with corner radius 185, soft drop shadow in the margin.
+    Motif: a harmonic stack as it appears in a spectrogram (time on x,
+    frequency on y, colour = level). The 2nd harmonic is a ringing resonance;
+    a selection box covers part of it and, inside the box, the band is
+    scooped thin and cooled in colour: the resonance has been reduced.
+    Original artwork, licensed with the project under GPL-3.0-only.
+  -->
+  <defs>
+    <path id="tile" d="M382.8 100L641.2 100C722.63 100 763.34 100 800.06 112.12L807.17 113.86C855.03 131.28 892.72 168.97 910.14 216.83L911.88 223.94C924 260.66 924 301.37 924 382.8L924 641.2C924 722.63 924 763.34 911.88 800.06L910.14 807.17C892.72 855.03 855.03 892.72 807.17 910.14L800.06 911.88C763.34 924 722.63 924 641.2 924L382.8 924C301.37 924 260.66 924 223.94 911.88L216.83 910.14C168.97 892.72 131.28 855.03 113.86 807.17L112.12 800.06C100 763.34 100 722.63 100 641.2L100 382.8C100 301.37 100 260.66 112.12 223.94L113.86 216.83C131.28 168.97 168.97 131.28 216.83 113.86L223.94 112.12C260.66 100 301.37 100 382.8 100Z"/>
+    <!-- 2nd harmonic: full height outside the selection, scooped thin inside it -->
+    <path id="h2" d="M234 530H384C416 530 420 554 448 554H596C624 554 628 530 660 530H810A30 30 0 0 1 810 590H660C628 590 624 566 596 566H448C420 566 416 590 384 590H234A30 30 0 0 1 234 530Z"/>
+
+    <filter id="shadowBlur" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <filter id="soft" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+
+    <linearGradient id="tileFill" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="924">
+      <stop offset="0" stop-color="#18224F"/>
+      <stop offset="0.5" stop-color="#0D1335"/>
+      <stop offset="1" stop-color="#090C24"/>
+    </linearGradient>
+    <radialGradient id="floor" gradientUnits="userSpaceOnUse" cx="420" cy="620" r="440">
+      <stop offset="0" stop-color="#3A3CB0" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#3A3CB0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="924">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.20"/>
+      <stop offset="0.25" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.03"/>
+    </linearGradient>
+
+    <!-- 1st harmonic (fundamental): loudest, warmest -->
+    <linearGradient id="h1Glow" gradientUnits="userSpaceOnUse" x1="200" y1="0" x2="852" y2="0">
+      <stop offset="0" stop-color="#FF6A3A" stop-opacity="0"/>
+      <stop offset="0.04" stop-color="#FF6A3A"/>
+      <stop offset="0.6" stop-color="#FF6A3A" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#E2508E" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h1Body" gradientUnits="userSpaceOnUse" x1="200" y1="0" x2="852" y2="0">
+      <stop offset="0" stop-color="#FFB04A" stop-opacity="0"/>
+      <stop offset="0.035" stop-color="#FFB04A"/>
+      <stop offset="0.2" stop-color="#FFC95C"/>
+      <stop offset="0.55" stop-color="#FFA145"/>
+      <stop offset="0.8" stop-color="#FF7656"/>
+      <stop offset="0.93" stop-color="#EC5486" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#EC5486" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h1Core" gradientUnits="userSpaceOnUse" x1="210" y1="0" x2="800" y2="0">
+      <stop offset="0" stop-color="#FFF6DE" stop-opacity="0"/>
+      <stop offset="0.04" stop-color="#FFF6DE"/>
+      <stop offset="0.3" stop-color="#FFF6DE" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFF6DE" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- 2nd harmonic: the ringing resonance; hot outside the selection, cooled inside -->
+    <linearGradient id="h2Glow" gradientUnits="userSpaceOnUse" x1="204" y1="0" x2="840" y2="0">
+      <stop offset="0" stop-color="#F2507E" stop-opacity="0"/>
+      <stop offset="0.04" stop-color="#F2507E"/>
+      <stop offset="0.26" stop-color="#F2507E"/>
+      <stop offset="0.34" stop-color="#F2507E" stop-opacity="0.1"/>
+      <stop offset="0.66" stop-color="#F2507E" stop-opacity="0.1"/>
+      <stop offset="0.74" stop-color="#F2507E"/>
+      <stop offset="0.9" stop-color="#F2507E" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#F2507E" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h2Body" gradientUnits="userSpaceOnUse" x1="204" y1="0" x2="840" y2="0">
+      <stop offset="0" stop-color="#FF775C" stop-opacity="0"/>
+      <stop offset="0.035" stop-color="#FF775C"/>
+      <stop offset="0.18" stop-color="#FF8A5C"/>
+      <stop offset="0.27" stop-color="#FF7468"/>
+      <stop offset="0.34" stop-color="#9658EC" stop-opacity="0.95"/>
+      <stop offset="0.66" stop-color="#9658EC" stop-opacity="0.95"/>
+      <stop offset="0.73" stop-color="#FF7468"/>
+      <stop offset="0.88" stop-color="#F8616E"/>
+      <stop offset="1" stop-color="#F2507E" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h2Core" gradientUnits="userSpaceOnUse" x1="204" y1="0" x2="840" y2="0">
+      <stop offset="0" stop-color="#FFE6D2" stop-opacity="0"/>
+      <stop offset="0.04" stop-color="#FFE6D2"/>
+      <stop offset="0.2" stop-color="#FFE6D2" stop-opacity="0.85"/>
+      <stop offset="0.27" stop-color="#FFE6D2" stop-opacity="0"/>
+      <stop offset="0.73" stop-color="#FFE6D2" stop-opacity="0"/>
+      <stop offset="0.8" stop-color="#FFE6D2" stop-opacity="0.7"/>
+      <stop offset="0.96" stop-color="#FFE6D2" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- upper harmonics: quieter, cooler, decaying sooner -->
+    <linearGradient id="h3Body" gradientUnits="userSpaceOnUse" x1="210" y1="0" x2="818" y2="0">
+      <stop offset="0" stop-color="#EC5CA2" stop-opacity="0"/>
+      <stop offset="0.04" stop-color="#EC5CA2"/>
+      <stop offset="0.35" stop-color="#DC4F9C"/>
+      <stop offset="0.75" stop-color="#B84AAE" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#B84AAE" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h3Core" gradientUnits="userSpaceOnUse" x1="214" y1="0" x2="740" y2="0">
+      <stop offset="0" stop-color="#FFD0E6" stop-opacity="0"/>
+      <stop offset="0.05" stop-color="#FFD0E6" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFD0E6" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h4Body" gradientUnits="userSpaceOnUse" x1="218" y1="0" x2="790" y2="0">
+      <stop offset="0" stop-color="#AE58E6" stop-opacity="0"/>
+      <stop offset="0.045" stop-color="#AE58E6"/>
+      <stop offset="0.4" stop-color="#9A52DE"/>
+      <stop offset="1" stop-color="#7E4AD6" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h5Body" gradientUnits="userSpaceOnUse" x1="228" y1="0" x2="756" y2="0">
+      <stop offset="0" stop-color="#7C66F4" stop-opacity="0"/>
+      <stop offset="0.05" stop-color="#7C66F4"/>
+      <stop offset="0.4" stop-color="#6E60EE" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#5E5AE6" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h6Body" gradientUnits="userSpaceOnUse" x1="240" y1="0" x2="716" y2="0">
+      <stop offset="0" stop-color="#5A82F4" stop-opacity="0"/>
+      <stop offset="0.06" stop-color="#5A82F4"/>
+      <stop offset="0.4" stop-color="#5078EE" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#4A6EE6" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- drop shadow and tile -->
+  <use xlink:href="#tile" transform="translate(0 10)" fill="#000000" opacity="0.32" filter="url(#shadowBlur)"/>
+  <use xlink:href="#tile" fill="url(#tileFill)"/>
+  <use xlink:href="#tile" fill="url(#floor)"/>
+
+  <!-- glows -->
+  <g filter="url(#glow)">
+    <rect x="240" y="233.5" width="476" height="13" rx="6.5" fill="url(#h6Body)" opacity="0.8"/>
+    <rect x="228" y="274" width="528" height="20" rx="10" fill="url(#h5Body)" opacity="0.8"/>
+    <rect x="218" y="331" width="572" height="30" rx="15" fill="url(#h4Body)" opacity="0.8"/>
+    <rect x="210" y="411" width="608" height="42" rx="21" fill="url(#h3Body)" opacity="0.7"/>
+    <use xlink:href="#h2" fill="url(#h2Glow)" opacity="0.7"/>
+    <rect x="200" y="714" width="652" height="68" rx="34" fill="url(#h1Glow)" opacity="0.6"/>
+  </g>
+
+  <!-- harmonic bodies -->
+  <g>
+    <rect x="240" y="233.5" width="476" height="13" rx="6.5" fill="url(#h6Body)"/>
+    <rect x="228" y="274" width="528" height="20" rx="10" fill="url(#h5Body)"/>
+    <rect x="218" y="331" width="572" height="30" rx="15" fill="url(#h4Body)"/>
+    <rect x="210" y="411" width="608" height="42" rx="21" fill="url(#h3Body)"/>
+    <use xlink:href="#h2" fill="url(#h2Body)"/>
+    <rect x="200" y="714" width="652" height="68" rx="34" fill="url(#h1Body)"/>
+  </g>
+
+  <!-- hot cores -->
+  <g filter="url(#soft)">
+    <rect x="214" y="428" width="526" height="8" rx="4" fill="url(#h3Core)" opacity="0.6"/>
+    <rect x="204" y="553" width="636" height="14" rx="7" fill="url(#h2Core)" opacity="0.75"/>
+    <rect x="210" y="739" width="590" height="18" rx="9" fill="url(#h1Core)" opacity="0.85"/>
+  </g>
+
+  <!-- selection: a narrow frequency band over a stretch of time -->
+  <rect x="372" y="500" width="300" height="120" rx="18" fill="none" stroke="#7FDBFF" stroke-width="14" opacity="0.55" filter="url(#soft)"/>
+  <rect x="372" y="500" width="300" height="120" rx="18" fill="#BFEFFF" fill-opacity="0.07" stroke="#EAF8FF" stroke-width="10"/>
+  <g fill="#EAF8FF">
+    <rect x="360" y="488" width="24" height="24" rx="6"/>
+    <rect x="660" y="488" width="24" height="24" rx="6"/>
+    <rect x="360" y="608" width="24" height="24" rx="6"/>
+    <rect x="660" y="608" width="24" height="24" rx="6"/>
+  </g>
+
+  <!-- rim light -->
+  <use xlink:href="#tile" fill="none" stroke="url(#rim)" stroke-width="4"/>
+</svg>

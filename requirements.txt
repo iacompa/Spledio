@@ -1,0 +1,11 @@
+# Exact runtime pins verified on macOS 27.0.1 arm64 (Apple M4 Pro), CPython 3.14.7, 2026-11-06.
+PySide6==6.11.3
+PySide6_Essentials==6.11.3
+PySide6_Addons==6.11.3
+shiboken6==6.11.3
+numpy==2.4.6
+scipy==1.17.1
+soundfile==0.13.1
+sounddevice==0.5.5
+cffi==2.1.1
+pycparser==3.12
