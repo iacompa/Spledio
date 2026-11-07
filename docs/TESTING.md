@@ -40,6 +40,7 @@ playback was instead checked in the real-app run below.
 | `test_ui_canvas.py` | 20 | canvas tools, selection drawing, zoom/pan, crosshair |
 | `test_ui_modules.py` | 12 | Preview / Bypass / Apply / Cancel through the Edit panel, tutorials |
 | `test_areas.py` | 11 | adjusted areas: 1 dB / 6 dB step sequence, silence and back is exact, independent and overlapping areas, merge of rapid presses into one undo step (counted from the key press, so a slow render does not split them), locked layer, removed area refused, save/reopen, timeline freeze + undo |
+| `test_memory.py` | 33 | long-file memory without changing samples: float32 component == float64 component rounded once, in-place gain == whole-region render, one stored undo copy per edit (swap), merged key presses add no undo memory, unused area components freed, difference of an older edit exact, spill to disk and back, block-rendered mix/export == whole render, adopted playback buffer, RAM-sized budgets, area components stay in RAM, block-wise clip peak == whole-region peak (NaN kept), in-place swap in RAM and on disk (also interrupted, and for another dtype) |
 | `test_ui_areas.py` | 4 | real main window: ↑/↓/+/−/Shift/0 keys, click-to-pick, Delete removes, Highlight toggle, Areas panel, level bar (− / + / slider / Silence / ✕, placement, no busy flash, actions not left disabled), zoom shortcuts |
 | `test_ui_workflow.py` | 4 | real main window, core resonance workflow end to end, every enabled action triggered once without error, `--smoke-test` mode passes |
 
@@ -131,6 +132,45 @@ Gatekeeper (`spctl`) **accepts** a quarantined copy of the DMG and the app copie
 Developer ID". Details in
 [RELEASE_MACOS.md](RELEASE_MACOS.md#first-signed-and-notarized-build-2026-11-07).
 
+## Memory measurements (2026-11-07)
+
+`scripts/memory_profile.py` runs the real main window (offscreen Qt) on a generated 44.1 kHz stereo
+16-bit WAV. It opens the file and waits for the spectrogram, makes a −6 dB adjusted area (200–4000 Hz,
+from 30 s), exports the mix as 32-bit float WAV through the window's export job, opens the export
+dialog, and undoes the area. A thread reads the process's memory footprint (`phys_footprint`, what
+Activity Monitor shows as Memory) every 5 ms. **Before** is Spledio 1.1 (commit `60009fc`), **after**
+is commit `1a3edd0`; both ran on this Mac (24 GB RAM, so both use a 512 MB tile cache and a 768 MB undo
+budget). Every run also checked that the exported file equals the playback mix sample for sample and
+that undo restores the layer bit-exactly; all passed.
+
+Peak memory footprint in GB:
+
+| File / area | Version | Open | Area applied | Export | Undo |
+|---|---|---|---|---|---|
+| 10 min / 5 min | before | 1.47 | 2.53 | 2.53 | 2.06 |
+| | after | 0.78 | 1.30 | 1.30 | 1.31 |
+| 30 min / 25 min | before | 3.68 | 6.26 | 5.08 | 5.86 |
+| | after | 1.64 | 3.48 | 3.48 | 3.49 |
+| 60 min / 50 min | before | 7.05 | 11.75 | 7.39 | 11.04 |
+| | after | 2.87 | 6.26 | 3.97 | 5.28 |
+
+The export peak includes what was already in use when the export started; the new export itself adds
+nothing measurable (the mix is rendered in blocks). With the budgets of an 8 GB Mac (256 MB tile cache,
+512 MB undo; set with `MEMPROF_RAM_GB=8` on this Mac) the new code measured: 30 min / 25 min: 1.64 /
+3.49 / 3.49 / 2.80; 60 min / 50 min: 2.89 / 6.38 / 3.97 / 5.27.
+
+What stays in use: after the 50-minute area the footprint settled at 3.96 GB, which is the layer
+(1.27 GB), the float32 playback mix (1.27 GB), the area's component (1.06 GB) and the app itself; the
+undo copy of the span is on disk. A `--tracemalloc` run (10 min) found only these arrays alive after
+the area, plus the one undo copy that fits in RAM. Values read 3 s after a phase vary between runs,
+because macOS takes freed memory back lazily: the same 30-minute area settled at 3.46 GB in one run and
+at 2.03 GB in another, with peaks of 3.46 and 3.47 GB. The peaks repeat within about 0.2 GB.
+
+Not measured: a visible window, playback while editing, files with several layers, 48 kHz files
+(arrays about 9 % larger than at 44.1 kHz), and a real 8 GB Mac.
+
+The full suite on commit `1a3edd0`, with `SPLEDIO_AUDIO_TEST=1`: **459 passed**, nothing skipped.
+
 ## Not tested
 
 * Windows and Linux: no installers built, and the `.bat`/`.sh` setup scripts have not been run there.
@@ -140,5 +180,6 @@ Developer ID". Details in
   audible playback was tested from source (see above).
 * The website page `website/spledio/index.html`: layout previewed in a browser; links point to the GitHub repository (public since 2026-11-07); not clicked through since.
 * The opt-in real-device unit test in this record (see above).
-* Very long files (> 30 min) for memory and speed.
+* Very long files (> 30 min) for speed and real interactive use. Memory was measured up to 60 min, in the
+  offscreen app only (see [Memory measurements](#memory-measurements-2026-11-07)).
 * Screen readers.

@@ -60,8 +60,12 @@ A pure full-band time-range selection uses a direct sample-domain envelope
 instead (exact time boundaries, no STFT smearing).
 
 Every committed edit stores its STFT config, gain, selection snapshot, channel
-scope and target layer, plus a `LayerPatch` (region, before-samples,
-after-samples) so undo restores exact samples. Display FFT settings are
+scope and target layer, plus a `LayerPatch` (region and samples) so undo
+restores exact samples. A patch keeps only the version that is not in the layer
+right now (the samples from before the edit while it is applied, the samples it
+wrote while it is undone); undo/redo swap it with the layer's samples, in place
+and block by block (streamed through a file when it is on disk), which is
+exact because only commands write layer audio and history is linear. Display FFT settings are
 independent and never reinterpret committed edits.
 
 ## Threads

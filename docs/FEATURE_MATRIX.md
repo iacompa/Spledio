@@ -70,7 +70,7 @@ Status legend:
 | Extract to new layer / copy to new layer | Implemented | extract conserves the sum to ~1e-16 |
 | Delete time / crop time / insert silence (ripples all layers) | Implemented | |
 | Processing resolution per edit (FFT size, hop, window) | Implemented | stored with each operation |
-| Undo / redo (200 steps, RAM budget + disk spill) | Implemented | bit-exact restore tested; rapid key presses on one area merge into one step |
+| Undo / redo (200 steps, RAM budget + disk spill) | Implemented | bit-exact restore tested; rapid key presses on one area merge into one step; one stored copy per edit (swapped on undo/redo) |
 | History panel (jump to any state) | Implemented | |
 | Clipping warning after boosts | Implemented | |
 | Spectral heal / interpolate, de-click, de-hum, noise reduction | Not supported yet | M4 |

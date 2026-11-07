@@ -29,6 +29,12 @@ Where to pick up development. Read [ARCHITECTURE.md](ARCHITECTURE.md) first.
    every change adds `(G' − G)·c` and removal adds `(1 − G)·c`. Never recompute an area's audio from the
    current layer (that would bake in other areas). Timeline edits must go through `EditorSession._timeline`,
    which freezes areas in the same undo step.
+8. **Only commands write layer audio.** An undo patch keeps just the version that is not in the layer
+   and undo/redo swap it with the layer's samples in place (`commands/history.py`, `LayerPatch`,
+   `PatchStore.swap`). That is exact
+   only because nothing else writes `layer.audio`; a new feature that changes samples must go through
+   a command. Long-region work is done in blocks (`add_scaled_in_place`, `Project.render_mix`,
+   `Project.mix_view`) so no full-size float64 copy is made; keep new code that way.
 
 ## How to add a processing module (M4 template)
 

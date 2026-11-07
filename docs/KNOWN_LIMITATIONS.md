@@ -34,9 +34,14 @@ Honest list of what is missing, rough, or only partly verified. See
   span are bit-identical. A full-band *time range* selection is applied in the sample domain and is exact.
 * **Boosting can clip.** The app warns with the new peak after any boost, and export lets you choose
   refuse / reduce level / limit / hard-clip. 32-bit float export never clips.
-* **Whole-file in memory.** Each layer is held in RAM (float32 by default). A 60-minute stereo 48 kHz
-  file ≈ 1.4 GB per layer. Undo patches spill to disk above a RAM budget, but layers themselves do not.
-  Very long files with many layers can exhaust memory.
+* **Whole-file in memory.** Each layer is held in RAM (float32 by default), and so is the float32
+  playback mix: a 60-minute stereo 48 kHz file ≈ 1.4 GB per layer plus 1.4 GB for playback. Undo data
+  moves to disk above a RAM budget (1/16 of the machine's RAM, 256–768 MB); layers and the playback mix
+  do not. Measured on 44.1 kHz stereo files (peak memory of the app, 2026-11-07; details in
+  [TESTING.md](TESTING.md#memory-measurements-2026-11-07)): a 30-minute file opens in 1.6 GB and a
+  25-minute adjusted area peaks at 3.5 GB; a 60-minute file opens in 2.9 GB, and a 50-minute area peaks
+  at 6.3 GB while it is applied and then settles at about 4.0 GB. Long files with several layers or
+  several long areas can still exhaust memory on an 8 GB Mac.
 * **Delete/crop time and insert silence** ripple every layer and are undoable, but they are full-array
   operations (fast enough for normal files, but not chunked).
 * **Display at extreme zoom-out** decimates analysis frames (power-of-two stride). A very short event
@@ -49,12 +54,15 @@ Honest list of what is missing, rough, or only partly verified. See
 * **Area keys need canvas focus.** ↑/↓, +/−, 0, [ and ] act on areas only while the spectrogram has
   keyboard focus (the hint bar says "Click the spectrogram, then …" otherwise), so lists and number boxes
   keep their own arrow keys. Zoom is on Ctrl/Cmd+= / Ctrl/Cmd+− and Ctrl/Cmd+Shift+↑/↓.
-* **Area memory.** Each area keeps its component (the audio it covered) in the undo store and in the
-  project file: a full-length stereo area of a 10-minute 48 kHz file is about 230 MB in float32.
+* **Area memory.** Each area keeps its component (the audio it covered, float32) in the project file and
+  in RAM – it is read on every change of that area, so it moves to disk only after all other undo data.
+  Its undo step keeps one copy of the samples from before it, which moves to disk first. A full-length
+  stereo area of a 10-minute 48 kHz file is about 230 MB of component plus 230 MB of undo data.
 * **viridis-like / cividis-like** colour maps are approximations, not the exact published tables.
 * **Playback latency compensation** uses the latency PortAudio reports; Bluetooth outputs often
   report it inaccurately, so the playhead can visibly lead/lag on them.
-* **Sample-rate change on export** uses polyphase resampling in memory (no chunking).
+* **Sample-rate change on export** uses polyphase resampling in memory (no chunking): one input channel
+  at a time, but the whole resampled output in float64.
 
 ## Platform status
 
