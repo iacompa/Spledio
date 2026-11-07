@@ -250,6 +250,45 @@ def test_ab_and_difference_compare_the_last_adjusted_area_change(session):
     assert np.max(np.abs(d.data - (mix0 - mix1)[:, start : start + n])) < 1e-6
 
 
+def _check_ab_against(s, mix_before, mix_after, must_cover=()):
+    start, a, b, _ = s.ab_regions()
+    n = a.shape[1]
+    for t0, t1 in must_cover:  # the compared span reaches every part of the edit
+        assert start <= int(t0 * SR) and start + n >= int(t1 * SR)
+    assert np.max(np.abs(a - mix_before[:, start : start + n])) < 1e-6
+    assert np.max(np.abs(b - mix_after[:, start : start + n])) < 1e-6
+    d = s.difference_buffer()
+    assert d.start == start
+    assert np.max(np.abs(d.data - (mix_before - mix_after)[:, start : start + n])) < 1e-6
+
+
+def test_ab_and_difference_cover_every_part_of_a_multi_part_edit(session):
+    """A/B and Difference looked only at the first part of an edit made of several: Remove all
+    areas compared one area, and for the transfer brush and Extract the "before" side mixed the
+    old source layer with the new content of the other layer."""
+    s = session
+    s.set_selection(Selection.of(RectShape(0.3, 0.8, 2300, 2700)))
+    s.adjust_area(target_db=-12.0)
+    s.set_selection(Selection.of(RectShape(1.8, 2.4, 2300, 2700)))
+    s.adjust_area(target_db=-12.0)
+    mix0 = s.project.render_mix()
+    s.remove_all_areas()
+    _check_ab_against(s, mix0, s.project.render_mix(), must_cover=[(0.3, 0.8), (1.8, 2.4)])
+
+    s.add_empty_layer("target")
+    target = s.active_layer_id
+    s.set_layer_props(target, gain_db=-6.0)
+    s.set_active_layer(s.project.layers[0].id)
+    mix0 = s.project.render_mix()
+    s.transfer_brush(BrushShape(((0.6, 2500.0), (2.0, 2500.0)), rt=0.05, rf=200, hardness=0.4), target, amount=0.6)
+    _check_ab_against(s, mix0, s.project.render_mix())
+
+    mix0 = s.project.render_mix()
+    s.set_selection(Selection.of(RectShape(0.5, 2.5, 400, 500)))
+    s.extract_to_new_layer()
+    _check_ab_against(s, mix0, s.project.render_mix())
+
+
 def test_ab_and_difference_refuse_edits_that_no_longer_line_up(session):
     """After a time edit (or once the edited layer is gone) an older patch no longer matches the
     audio: A/B used to crash with a shape error or a KeyError instead of saying there is nothing

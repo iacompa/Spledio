@@ -928,43 +928,66 @@ class EditorSession:
             layer = self.project.layer(pv.layer_id)
             return AuditionBuffer(pv.start, self._f32((pv.original - pv.processed) * layer.mix_factor),
                                   f"Removed by preview: {pv.label}")
-        cmd, p = self._last_patch()
-        layer = self.project.layer(p.layer_id)
-        before = self.history.store.get(p.before).astype(np.float64)
-        after = self.history.store.get(p.after).astype(np.float64)
-        return AuditionBuffer(p.start, self._f32((before - after) * layer.mix_factor), f"Removed by: {cmd.label}")
+        cmd, start, parts = self._last_edit()
+        diff = sum(layer.mix_factor * (before - after) for layer, before, after in parts)
+        return AuditionBuffer(start, self._f32(diff), f"Removed by: {cmd.label}")
 
-    def _last_patch(self) -> tuple[Command, LayerPatch]:
-        """The most recent audio edit that can still be compared (A/B, Difference).
+    def _last_edit(self) -> tuple[Command, int, list[tuple[Layer, np.ndarray, np.ndarray]]]:
+        """The most recent audio edit that can still be compared (A/B, Difference), whole.
 
-        Gain edits, brush strokes, extractions and adjusted-area changes count. A time edit
-        (delete / crop / insert) moves the audio, so no older patch lines up any more; neither
-        does a patch on a layer that has been deleted since."""
+        Returns ``(command, start, parts)``: every layer the edit changed, with its audio over
+        the span covering all of the edit's parts as it was before and as it is now (float64).
+        A layer the edit created (Extract) is silent before. Gain edits, brush strokes,
+        transfers, extractions and adjusted-area changes count. A time edit (delete / crop /
+        insert) moves the audio, so no older edit lines up any more; neither does an edit on a
+        layer that has been deleted since."""
         for cmd in reversed(self.history.undo_stack):
             if _moves_timeline(cmd):
                 break
             patches = _patches_of(cmd)
-            if patches:
-                if not self.project.has_layer(patches[0].layer_id):
-                    break
-                return cmd, patches[0]
+            if not patches:
+                continue
+            if not all(self.project.has_layer(p.layer_id) for p in patches):
+                break
+            start = min(p.start for p in patches)
+            end = max(p.end for p in patches)
+            added = _layers_added_by(cmd)
+            parts: list[tuple[Layer, np.ndarray, np.ndarray]] = []
+            for lid in dict.fromkeys(p.layer_id for p in patches):
+                if lid in added:
+                    continue  # silent before the edit, whatever was written into it
+                layer = self.project.layer(lid)
+                after = layer.audio[:, start:end].astype(np.float64)
+                before = after.copy()
+                for p in reversed([p for p in patches if p.layer_id == lid]):  # undo the parts in reverse
+                    before[:, p.start - start : p.end - start] = self.history.store.get(p.before)
+                parts.append((layer, before, after))
+            for lid in added:
+                if self.project.has_layer(lid):
+                    layer = self.project.layer(lid)
+                    after = layer.audio[:, start:end].astype(np.float64)
+                    parts.append((layer, np.zeros_like(after), after))
+            return cmd, start, parts
         raise EditError("No edit to compare: apply or preview an edit first")
 
     def ab_regions(self) -> tuple[int, np.ndarray, np.ndarray, str]:
         """(start, mix_region_A_original, mix_region_B_processed, label) for A/B.
 
-        Uses the pending preview if any, otherwise the most recent audio edit."""
+        Uses the pending preview if any, otherwise the whole of the most recent audio edit."""
         pv = self._preview
         if pv is not None:
             layer = self.project.layer(pv.layer_id)
             a = self.mix_with_override(layer, pv.start, pv.original)
             b = self.mix_with_override(layer, pv.start, pv.processed)
             return pv.start, a, b, pv.label
-        cmd, p = self._last_patch()
-        layer = self.project.layer(p.layer_id)
-        a = self.mix_with_override(layer, p.start, self.history.store.get(p.before))
-        b = self.project.render_mix(p.start, p.end, dtype=np.float32)
-        return p.start, a, b, cmd.label
+        cmd, start, parts = self._last_edit()
+        b = self.project.render_mix(start, start + parts[0][2].shape[1])
+        a = b.copy()
+        audible = self.project.audible_layers()
+        for layer, before, after in parts:
+            if layer in audible:
+                a += layer.mix_factor * (before - after)
+        return start, a.astype(np.float32), b.astype(np.float32), cmd.label
 
     def mix_with_override(self, layer: Layer, start: int, data: np.ndarray) -> np.ndarray:
         n = data.shape[1]
@@ -1034,6 +1057,14 @@ def _patches_of(cmd: Command):
         for c in cmd.children:
             out.extend(_patches_of(c))
         return out
+    return []
+
+
+def _layers_added_by(cmd: Command) -> list[str]:
+    if isinstance(cmd, AddLayerCommand):
+        return [cmd.layer.id]
+    if isinstance(cmd, CompositeCommand):
+        return [lid for c in cmd.children for lid in _layers_added_by(c)]
     return []
 
 
