@@ -144,6 +144,53 @@ def test_transfer_brush_preserves_sum(session):
     assert np.max(np.abs(s.project.layer(target).audio)) > 0.05
 
 
+@pytest.mark.parametrize("src_props,dst_props", [
+    ({"gain_db": 3.0}, {}),
+    ({}, {"gain_db": -6.0}),
+    ({}, {"polarity_inverted": True}),
+    ({"gain_db": -4.5, "polarity_inverted": True}, {"gain_db": 7.0}),
+    ({"mute": True}, {"mute": True}),
+])
+def test_transfer_brush_keeps_the_mix_when_the_layers_have_different_levels(session, src_props, dst_props):
+    """The brush moved the same samples between the layers, so the mix only stayed the same when
+    both layers were at 0 dB with the same polarity."""
+    s = session
+    s.add_empty_layer("target")
+    target = s.active_layer_id
+    src = s.project.layers[0].id
+    if src_props:
+        s.set_layer_props(src, **src_props)
+    if dst_props:
+        s.set_layer_props(target, **dst_props)
+    s.set_active_layer(src)
+    mix_before = s.project.render_mix()
+    both = [s.project.layer(src), s.project.layer(target)]
+    sum_before = s.project.render_mix(layers=both)
+    s.transfer_brush(BrushShape(((0.6, 2500.0), (2.0, 2500.0)), rt=0.05, rf=200, hardness=0.4), target, amount=0.6)
+    assert np.max(np.abs(s.project.render_mix() - mix_before)) < 1e-6
+    assert np.max(np.abs(s.project.render_mix(layers=both) - sum_before)) < 1e-6
+    moved = s.project.render_mix(layers=[s.project.layer(target)])  # what the target now adds to the mix
+    assert np.max(np.abs(moved)) > 0.05 * abs(s.project.layer(src).mix_factor)
+
+
+@pytest.mark.parametrize("which", ["target_muted", "source_soloed"])
+def test_transfer_brush_refuses_a_move_that_would_change_what_you_hear(session, which):
+    """Moving sound between an audible and a silent layer (mute / solo) cannot keep the mix."""
+    s = session
+    s.add_empty_layer("target")
+    target = s.active_layer_id
+    src = s.project.layers[0].id
+    s.set_layer_props(target if which == "target_muted" else src, **({"mute": True} if which == "target_muted" else {"solo": True}))
+    s.set_active_layer(src)
+    audio_before = [l.audio.copy() for l in s.project.layers]
+    steps = len(s.history.undo_stack)
+    with pytest.raises(EditError, match="mute|solo"):
+        s.transfer_brush(BrushShape(((0.6, 2500.0), (2.0, 2500.0)), rt=0.05, rf=200, hardness=0.4), target)
+    assert len(s.history.undo_stack) == steps
+    for l, a in zip(s.project.layers, audio_before):
+        np.testing.assert_array_equal(l.audio, a)
+
+
 # ---------------------------------------------------------------- 7. extraction via session
 def test_extract_and_copy_layer_semantics(session):
     s = session

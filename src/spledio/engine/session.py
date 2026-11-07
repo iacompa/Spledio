@@ -535,7 +535,12 @@ class EditorSession:
 
     def transfer_brush(self, brush: BrushShape, target_layer_id: str, amount: float = 1.0) -> EditResult:
         """Move ``amount`` (0..1) of the content under the brush from the active layer
-        to the target layer. Source + target is unchanged (before layer gains)."""
+        to the target layer, keeping the mix unchanged.
+
+        The content is rescaled by the ratio of the two layers' mix factors (gain and
+        polarity), so source + target sounds the same at their current levels. A move
+        between an audible and a silent layer (mute / solo) cannot keep the mix and is
+        refused."""
         with self._lock:
             src = self._editable_layer()
             if target_layer_id == src.id:
@@ -543,6 +548,14 @@ class EditorSession:
             dst = self.project.layer(target_layer_id)
             if dst.locked:
                 raise EditError(f"Target layer '{dst.name}' is locked")
+            audible = self.project.audible_layers()
+            if (src in audible) != (dst in audible):
+                silent = dst if src in audible else src
+                raise EditError(f"Layer '{silent.name}' is muted or not soloed, so the moved sound would "
+                                f"{'go silent' if silent is dst else 'become audible'}. Change its mute / solo first.")
+            if dst.mix_factor == 0.0:
+                raise EditError(f"Target layer '{dst.name}' is at -inf dB; raise its level first")
+            ratio = src.mix_factor / dst.mix_factor
             amount = float(np.clip(amount, 0.0, 1.0))
             sel = Selection.of(brush, channels=self.selection.channels if self.selection else None)
             if self.selection is not None:
@@ -550,9 +563,10 @@ class EditorSession:
                                 feather_f=self.selection.feather_f, feather_enabled=self.selection.feather_enabled,
                                 channels=self.selection.channels)
             comp = self.component(sel, src)
-            moved = (amount * comp.data).astype(np.dtype(self.project.storage_dtype)).astype(np.float64)
+            dt = np.dtype(self.project.storage_dtype)
+            moved = (amount * comp.data).astype(dt).astype(np.float64)
             new_src = src.audio[:, comp.start : comp.end].astype(np.float64) - moved
-            new_dst = dst.audio[:, comp.start : comp.end].astype(np.float64) + moved
+            new_dst = dst.audio[:, comp.start : comp.end].astype(np.float64) + (ratio * moved if ratio != 1.0 else moved)
             p1 = make_patch(self.history.store, src, comp.start, new_src, comp.channels)
             p2 = make_patch(self.history.store, dst, comp.start, new_dst, comp.channels)
             label = f"Transfer {amount * 100:.0f}% · {self.selection_label(sel)} · {src.name} → {dst.name}"

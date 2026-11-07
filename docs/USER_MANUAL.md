@@ -144,8 +144,9 @@ For careful work, the **Reduce Selected Sound** panel offers a preview workflow:
 2. **Preview (P)** plays the result without applying it.
 3. **Bypass (B)** or **A/B (A)** switch between original and preview while playing. Without a preview,
    **A/B** compares the last edit, an area turned up or down with ↑/↓ included. An edit made of several
-   parts (Remove all areas, the transfer brush, Extract) is compared as a whole. Extract moves sound to a
-   new layer without changing the mix, so A and B sound the same and D is silent for it. After a time
+   parts (Remove all areas, the transfer brush, Extract) is compared as a whole. Extract and the transfer
+   brush move sound to another layer without changing the mix, so A and B sound the same and D is silent
+   for them. After a time
    edit (delete, crop, insert) there is nothing older to compare until you edit again.
 4. **Apply** (⌘Return) applies it as one undo step, or **Cancel** discards the preview.
 
@@ -155,7 +156,9 @@ Other tools, all undoable:
   freehand lasso (**Shift+L**), polygon (**Shift+P**) and selection brush (**Shift+B**).
   Hold **Shift** to add to a selection and **Alt/Option** to subtract.
 * **Brushes:** reduce (**Shift+R**), amplify (**Shift+A**) and transfer to another layer (**Shift+T**).
-  One stroke is one undo step.
+  One stroke is one undo step. The transfer brush keeps the mix the same even when the two layers have
+  different levels or polarity. It refuses to move sound between a muted and an unmuted layer (or a
+  soloed and an unsoloed one), because that would change what you hear.
 * **Layers:** extract (⌘J) or copy (⌘⇧J) the selected sound to its own layer, then mute, solo or change
   the level of each layer. A new layer starts at the level, polarity, mute and solo of the layer it came
   from, so the mix sounds the same until you change it. You can export layers as separate files (stems).

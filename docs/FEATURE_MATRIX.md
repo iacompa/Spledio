@@ -66,7 +66,7 @@ Status legend:
 | Mute / delete spectral content | Implemented | ≥ 60 dB attenuation |
 | Preview / Bypass / A-B / Apply / Cancel workflow | Implemented | preview == commit == export (tested) |
 | Reduce brush / amplify brush | Implemented | one stroke = one undo |
-| Transfer brush (move painted content to another layer) | Implemented | sum preserved (tested) |
+| Transfer brush (move painted content to another layer) | Implemented | mix preserved at any layer level / polarity (tested); a move between an audible and a muted layer is refused |
 | Extract to new layer / copy to new layer | Implemented | extract conserves the sum to ~1e-16 |
 | Delete time / crop time / insert silence (ripples all layers) | Implemented | |
 | Processing resolution per edit (FFT size, hop, window) | Implemented | stored with each operation |
